@@ -1,0 +1,119 @@
+#####################################################################################################################
+#                                              Brazil: PNAD 2011                                                    #
+#####################################################################################################################
+## packages
+#install.packages("bit64")
+library(bit64)
+#install.packages("data.table")
+library(data.table)
+#install.packages("descrr")
+library(descr)
+#install.packages("xlsx")
+library(xlsx)
+#install.packages("tidyverse")
+library(tidyverse)
+#install.packages("survey")
+library(survey)
+options(survey.lonely.psu = "adjust")
+#install.packages("srvyr")
+library(srvyr)
+#####################################################################################################################
+# Opening the microdata and saving the datasets
+## setting working directory
+setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
+# codebook and dataset
+# downloaded from: 
+# https://www.ibge.gov.br/estatisticas/sociais/habitacao/9127-pesquisa-nacional-por-amostra-de-domicilios.html?=&t=microdados
+load("2011/codebook/dicPNAD2011.Rdata") # codebook
+
+######## household dataset
+## parâmetro com o final de cada campo
+dicdom2011$end_dom = dicdom2011$inicio + dicdom2011$tamanho - 1
+## converte o microdado para um arquivo csv
+fwf2csv(fwffile='2011/microdata/DOM2011.txt', csvfile='2011/microdata/dadosdom2011.csv', names=dicdom2011$cod, begin=dicdom2011$inicio, end=dicdom2011$end_dom)
+## efetua a leitura do conjunto de dados com o fread do data.table
+dadosdom2011 <- fread(input='2011/microdata/dadosdom2011.csv', sep='auto', sep2='auto', integer64='double')
+
+######## individual dataset
+## parâmetro com o final de cada campo
+dicpes2011$end_pes = dicpes2011$inicio + dicpes2011$tamanho - 1
+## converte o microdado para um arquivo csv
+fwf2csv(fwffile='2011/microdata/PES2011.txt', csvfile='2011/microdata/dadospes2011.csv', names=dicpes2011$cod, begin=dicpes2011$inicio, end=dicpes2011$end_pes)
+## efetua a leitura do conjunto de dados com o fread do data.table
+pnad2011 <- fread(input='2011/microdata/dadospes2011.csv', sep='auto', sep2='auto', integer64='double')
+
+## saving the datasets: 
+write.csv(dadosdom2011, "2011/microdata/pnad2011_household.csv")
+write.csv(pnad2011, "2011/microdata/pnad2011_individual.csv")
+#####################################################################################################################
+# PNAD 2011
+# opening household and individual datasets
+#####################################################################################################################
+### setting working directory
+setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
+# datasets
+pnad2011_individual <- read.csv("2011/microdata/pnad2011_individual.csv")
+pnad2011_household <-read.csv("2011/microdata/pnad2011_household.csv")
+
+# variables for merging datasets:
+summary(pnad2011_household$V0102) # número de controle (merging household and individual datasets)
+summary(pnad2011_household$V0103) # número de série (merging household and individual datasets)
+summary(pnad2011_individual$V0102) # número de controle
+summary(pnad2011_individual$V0103) # número de série
+
+# merging the datasets
+pnad2011 <- merge(pnad2011_individual, pnad2011_household, by = c("V0102", "V0103")) # merging datasets to get variables for PSU and strata
+write.csv(pnad2011, "2015/microdata/pnad2011.csv")
+
+### survey design
+### based on the paper: Silva, P. L. do N., Pessoa, D. G. C., & Lila, M. F. (2002). Análise estatística de dados da PNAD: Incorporando a estrutura do plano amostral 
+### [Statistical Analysis of Data from PNAD: Incorporating the Sample Design]. Ciência & Saúde Coletiva, 7(4), 659–670. https://doi.org/10.1590/S1413-81232002000400005
+
+# variables to take into account the survey design
+# household dataset
+summary(pnad2011_household$V4617) # STRAT: identificação de estrato de município autorepresentativo e não auto-representativo
+summary(pnad2011_household$V4618)# PSU: Unidade primária de amostragem
+summary(pnad2011_household$v4609) # projeção da população
+summary(pnad2011_household$v4610) # inverso da fração
+# individidual dataset
+summary(pnad2011_individual$V4729) # peso pessoa
+
+# design: http://asdfree.com/pesquisa-nacional-por-amostra-de-domicilios-pnad.html
+pop2011_types <- data.frame( 
+  V4609 = unique(pnad2011$V4609) , 
+  Freq = unique(pnad2011$V4609))
+
+prestratified2011_design <- svydesign(
+  id = ~ V4618 ,
+  strata = ~ V4617,
+  data = pnad2011,
+  weights = ~ V4610 ,
+  nest = TRUE)
+
+pnad2011_design <- postStratify( 
+  design = prestratified_design ,
+  strata = ~ V4609 ,
+  population = pop_types)
+
+# adapting the survey design to use with srvyr
+pnad2011_design_srvyr <- prestratified_design %>% 
+  postStratify(design = prestratified_design , strata = ~ V4609 , population = pop_types) %>% 
+  as_survey()
+#####################################################################################################################
+# Sample Selection
+# age of the respondents
+summary(pnad2011$V8005)
+sum(pnad2011$V8005 >= 18 & pnad2011$V8005 <=24) # N od respondents between 18 and 24 (N = 41,945).
+
+# position in the household 
+pnad2011_design_srvyr %>% 
+  filter(V8005 >= 18 & V8005 <=24) %>% 
+  mutate(V0401 = factor(V0401)) %>% 
+  group_by(V0401) %>% 
+  summarize(proportion = survey_mean(),
+            total = survey_total()) 
+
+# checking if I get the same results using the survey package.
+pnad2011_age <- subset(pnad2011_design, V8005 >= 18 & V8005 <=24)
+svymean(~as.factor(V0401), pnad2015_age) # YES! got the same results from the previous code.
+#####################################################################################################################
