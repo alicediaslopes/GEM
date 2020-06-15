@@ -73,8 +73,8 @@ write.csv(pnad2011, "2015/microdata/pnad2011.csv")
 # household dataset
 summary(pnad2011_household$V4617) # STRAT: identificação de estrato de município autorepresentativo e não auto-representativo
 summary(pnad2011_household$V4618)# PSU: Unidade primária de amostragem
-summary(pnad2011_household$v4609) # projeção da população
-summary(pnad2011_household$v4610) # inverso da fração
+summary(pnad2011_household$V4609) # projeção da população
+summary(pnad2011_household$V4610) # inverso da fração
 # individidual dataset
 summary(pnad2011_individual$V4729) # peso pessoa
 
