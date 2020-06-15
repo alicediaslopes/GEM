@@ -115,5 +115,5 @@ pnad2011_design_srvyr %>%
 
 # checking if I get the same results using the survey package.
 pnad2011_age <- subset(pnad2011_design, V8005 >= 18 & V8005 <=24)
-svymean(~as.factor(V0401), pnad2015_age) # YES! got the same results from the previous code.
+svymean(~as.factor(V0401), pnad2011_age) # YES! got the same results from the previous code.
 #####################################################################################################################
