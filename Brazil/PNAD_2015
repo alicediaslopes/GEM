@@ -55,6 +55,12 @@ setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
 pnad2015_individual <- read.csv("2015/microdata/pnad2015_individual.csv")
 pnad2015_household <-read.csv("2015/microdata/pnad2015_household.csv")
 
+# variables for merging datasets:
+summary(pnad2015_household$V0102) # número de controle (merging household and individual datasets)
+summary(pnad2015_household$V0103) # número de série (merging household and individual datasets)
+summary(pnad2015_individual$V0102) # número de controle
+summary(pnad2015_individual$V0103) # número de série
+
 # merging the datasets
 pnad2015 <- merge(pnad2015_individual, pnad2015_household, by = c("V0102", "V0103")) # merging datasets to get variables for PSU and strata
 write.csv(pnad2015, "2015/microdata/pnad2015.csv")
@@ -65,15 +71,11 @@ write.csv(pnad2015, "2015/microdata/pnad2015.csv")
 
 # variables to take into account the survey design
 # household dataset
-summary(pnad2015_household$V0102) # número de controle (merging household and individual datasets)
-summary(pnad2015_household$V0103) # número de série (merging household and individual datasets)
 summary(pnad2015_household$V4617) # STRAT: identificação de estrato de município autorepresentativo e não auto-representativo
 summary(pnad2015_household$V4618) # PSU: Unidade primária de amostragem
 summary(pnad2015_household$v4609) # projeção da população
 summary(pnad2015_household$v4610) # inverso da fração
 # individidual dataset
-summary(pnad2015_individual$V0102) # número de controle
-summary(pnad2015_individual$V0103) # número de série
 summary(pnad2015_individual$V4729) # peso pessoa
 
 # design: http://asdfree.com/pesquisa-nacional-por-amostra-de-domicilios-pnad.html
