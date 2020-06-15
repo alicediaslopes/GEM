@@ -91,13 +91,13 @@ prestratified2015_design <- svydesign(
   nest = TRUE)
 
 pnad2015_design <- postStratify( 
-  design = prestratified_design ,
+  design = prestratified2015_design ,
   strata = ~ V4609 ,
-  population = pop_types)
+  population = pop2015_types)
 
 # adapting the survey design to use with srvyr
-pnad2015_design_srvyr <- prestratified_design %>% 
-  postStratify(design = prestratified_design , strata = ~ V4609 , population = pop_types) %>% 
+pnad2015_design_srvyr <- prestratified2015_design %>% 
+  postStratify(design = prestratified2015_design , strata = ~ V4609 , population = pop2015_types) %>% 
   as_survey()
 #####################################################################################################################
 # Sample Selection
