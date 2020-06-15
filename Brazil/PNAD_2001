@@ -1,0 +1,103 @@
+#####################################################################################################################
+#                                              Brazil: PNAD 2001                                                   #
+#####################################################################################################################
+## packages
+#install.packages("bit64")
+library(bit64)
+#install.packages("data.table")
+library(data.table)
+#install.packages("descrr")
+library(descr)
+#install.packages("xlsx")
+library(xlsx)
+#install.packages("tidyverse")
+library(tidyverse)
+#install.packages("survey")
+library(survey)
+options(survey.lonely.psu = "adjust")
+#install.packages("srvyr")
+library(srvyr)
+#####################################################################################################################
+# Opening the microdata and saving the datasets
+## setting working directory
+setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
+# codebook and dataset
+# downloaded from: 
+# https://www.ibge.gov.br/estatisticas/sociais/habitacao/9127-pesquisa-nacional-por-amostra-de-domicilios.html?=&t=microdados
+dicdom2001 <- read.csv("2001/codebook/dicdom2001.csv")
+dicpes2001 <- read.csv("2001/codebook/dicpes2001.csv")
+
+######## household dataset
+## parâmetro com o final de cada campo
+dicdom2001$end_dom = dicdom2001$inicio + dicdom2001$tamanho - 1
+## converte o microdado para um arquivo csv
+fwf2csv(fwffile='2001/microdata/DOM2001.TXT', csvfile='2011/microdata/dadosdom2001.csv', names=dicdom2001$cod, begin=dicdom2001$inicio, end=dicdom2001$end_dom)
+## efetua a leitura do conjunto de dados com o fread do data.table
+dadosdom2001 <- fread(input='2011/microdata/dadosdom2001.csv', sep='auto', sep2='auto', integer64='double')
+
+######## individual dataset
+## parâmetro com o final de cada campo
+dicpes2001$end_pes <- dicpes2001$inicio + dicpes2001$tamanho - 1
+## converte o microdado para um arquivo csv
+fwf2csv(fwffile='2001/microdata/PES2001.TXT', csvfile='2001/microdata/dadospes2001.csv', names=dicpes2001$cod, begin=dicpes2001$inicio, end=dicpes2001$end_pes)
+## efetua a leitura do conjunto de dados com o fread do data.table
+dadospes2001 <- fread(input='2001/microdata/dadospes2001.csv', sep='auto', sep2='auto', integer64='double') 
+
+## saving the datasets: 
+write.csv(dadosdom2001, "2001/microdata/pnad2001_household.csv")
+write.csv(dadospes2001, "2001/microdata/pnad2001_individual.csv")
+#####################################################################################################################
+# PNAD 2001
+# opening household and individual datasets
+#####################################################################################################################
+### setting working directory
+setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
+# datasets
+pnad2001_individual <- read.csv("2001/microdata/pnad2001_individual.csv")
+pnad2001_household <-read.csv("2001/microdata/pnad2001_household.csv")
+
+# variables for merging datasets:
+summary(pnad2001_household$V0102) # número de controle (merging household and individual datasets)
+summary(pnad2001_household$V0103) # número de série (merging household and individual datasets)
+summary(pnad2001_individual$V0102) # número de controle
+summary(pnad2001_individual$V0103) # número de série
+
+# merging the datasets
+pnad2001 <- merge(pnad2001_individual, pnad2001_household, by = c("V0102", "V0103")) # merging datasets to get variables for PSU and strata
+write.csv(pnad2001, "2001/microdata/pnad2001.csv")
+
+### survey design
+### based on the paper: Silva, P. L. do N., Pessoa, D. G. C., & Lila, M. F. (2002). Análise estatística de dados da PNAD: Incorporando a estrutura do plano amostral 
+### [Statistical Analysis of Data from PNAD: Incorporating the Sample Design]. Ciência & Saúde Coletiva, 7(4), 659–670. https://doi.org/10.1590/S1413-81232002000400005
+
+# variables to take into account the survey design
+# household dataset
+summary(pnad2015_household$STRAT) # STRAT: identificação de estrato de município autorepresentativo e não auto-representativo
+summary(pnad2015_household$PSU) # PSU: Unidade primária de amostragem
+summary(pnad2015_household$v4609) # projeção da população
+summary(pnad2015_household$v4610) # inverso da fração
+# individidual dataset
+summary(pnad2015_individual$V4729) # peso pessoa
+
+# design: http://asdfree.com/pesquisa-nacional-por-amostra-de-domicilios-pnad.html
+pop2001_types <- data.frame( 
+  V4609 = unique(pnad2001$V4609) , 
+  Freq = unique(pnad2001$V4609))
+
+prestratified2001_design <- svydesign(
+  id = ~ PSU ,
+  strata = ~ STRAT,
+  data = pnad2001,
+  weights = ~ V4610 ,
+  nest = TRUE)
+
+pnad2001_design <- postStratify( 
+  design = prestratified_design ,
+  strata = ~ V4609 ,
+  population = pop_types)
+
+# adapting the survey design to use with srvyr
+pnad2001_design_srvyr <- prestratified_design %>% 
+  postStratify(design = prestratified_design , strata = ~ V4609 , population = pop_types) %>% 
+  as_survey()
+#####################################################################################################################
