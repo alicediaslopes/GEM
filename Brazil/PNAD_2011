@@ -95,13 +95,13 @@ prestratified2011_design <- svydesign(
   nest = TRUE)
 
 pnad2011_design <- postStratify( 
-  design = prestratified_design ,
+  design = prestratified2011_design ,
   strata = ~ V4609 ,
-  population = pop_types)
+  population = pop2011_types)
 
 # adapting the survey design to use with srvyr
-pnad2011_design_srvyr <- prestratified_design %>% 
-  postStratify(design = prestratified_design , strata = ~ V4609 , population = pop_types) %>% 
+pnad2011_design_srvyr <- prestratified2011_design %>% 
+  postStratify(design = prestratified2011_design , strata = ~ V4609 , population = pop2011_types) %>% 
   as_survey()
 #####################################################################################################################
 # sample selection
@@ -119,5 +119,5 @@ pnad2011_design_srvyr %>%
 
 # checking if I get the same results using the survey package.
 pnad2011_age <- subset(pnad2011_design, V8005 >= 18 & V8005 <=24)
-svymean(~as.factor(V0401), pnad2015_age) # YES! got the same results from the previous code.
+svymean(~as.factor(V0401), pnad2011_age) # YES! got the same results from the previous code.
 #####################################################################################################################
