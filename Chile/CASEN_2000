@@ -1,0 +1,30 @@
+#####################################################################################################################
+# CASEN 2000
+# opening household and individual datasets
+#####################################################################################################################
+### packages
+library(survey)
+library(srvyr)
+library(tidyverse)
+#####################################################################################################################
+# dataset for analysis
+#setting working directory
+setwd("~/Documents/Research/UNESCO/Chile")
+# dataset
+# downloaded from: https://github.com/pachamaltese/casen#encuesta-casen-en-formato-r
+casen2000 <- readRDS("CASEN/2000/casen2000.rds")
+#####################################################################################################################
+### survey design
+# based on the R package: https://pacha.dev/casen/ (got some help from Mauricio Vargas)
+# variables to take into account the survey design
+summary(casen2000$segmento) # PSU
+summary(casen2000$estrato) # STRATA
+summary(casen2000$expr) # Weight
+
+# design:
+casen2000_design <- casen2000 %>% 
+  as_survey_design(id = segmento, strata = estrato, weight = expr)
+#####################################################################################################################
+# checking the age of the respondents
+summary(casen2000$edad)
+sum(casen2000$edad >= 18 & casen2000$edad <=24) # N od respondents between 18 and 24 (N = 28,604).
