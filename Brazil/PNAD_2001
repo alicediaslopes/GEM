@@ -18,7 +18,8 @@ options(survey.lonely.psu = "adjust")
 #install.packages("srvyr")
 library(srvyr)
 #####################################################################################################################
-# Opening the microdata and saving the datasets
+# opening the microdata and saving the datasets
+#####################################################################################################################
 ## setting working directory
 setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
 # codebook and dataset
@@ -47,14 +48,17 @@ dadospes2001 <- fread(input='2001/microdata/dadospes2001.csv', sep='auto', sep2=
 write.csv(dadosdom2001, "2001/microdata/pnad2001_household.csv")
 write.csv(dadospes2001, "2001/microdata/pnad2001_individual.csv")
 #####################################################################################################################
-# PNAD 2001
 # opening household and individual datasets
 #####################################################################################################################
+### packages
+library(survey)
+library(srvyr)
+library(tidyverse)
 ### setting working directory
 setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
 # datasets
-pnad2001_individual <- read.csv("2001/microdata/pnad2001_individual.csv")
-pnad2001_household <-read.csv("2001/microdata/pnad2001_household.csv")
+pnad2001_individual <- read.csv("2001/microdata/pnad2001_individual.csv", fileEncoding="latin1")
+pnad2001_household <- read.csv("2001/microdata/pnad2001_household.csv")
 
 # variables for merging datasets:
 summary(pnad2001_household$V0102) # número de controle (merging household and individual datasets)
@@ -63,21 +67,26 @@ summary(pnad2001_individual$V0102) # número de controle
 summary(pnad2001_individual$V0103) # número de série
 
 # merging the datasets
-pnad2001 <- merge(pnad2001_individual, pnad2001_household, by = c("V0102", "V0103")) # merging datasets to get variables for PSU and strata
-write.csv(pnad2001, "2001/microdata/pnad2001.csv")
-
+#pnad2001 <- merge(pnad2001_individual, pnad2001_household, by = c("V0102", "V0103")) # merging datasets to get variables for PSU and strata
+#write.csv(pnad2001, "2001/microdata/pnad2001.csv")
+#####################################################################################################################
+# PNAD 2001
+# dataset for analysis
+setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
+pnad2001 <- read.csv("2001/microdata/pnad2001.csv")
+#####################################################################################################################
 ### survey design
 ### based on the paper: Silva, P. L. do N., Pessoa, D. G. C., & Lila, M. F. (2002). Análise estatística de dados da PNAD: Incorporando a estrutura do plano amostral 
 ### [Statistical Analysis of Data from PNAD: Incorporating the Sample Design]. Ciência & Saúde Coletiva, 7(4), 659–670. https://doi.org/10.1590/S1413-81232002000400005
 
 # variables to take into account the survey design
 # household dataset
-summary(pnad2015_household$STRAT) # STRAT: identificação de estrato de município autorepresentativo e não auto-representativo
-summary(pnad2015_household$PSU) # PSU: Unidade primária de amostragem
-summary(pnad2015_household$v4609) # projeção da população
-summary(pnad2015_household$v4610) # inverso da fração
+summary(pnad2001_household$STRAT) # STRAT: identificação de estrato de município autorepresentativo e não auto-representativo
+summary(pnad2001_household$PSU) # PSU: Unidade primária de amostragem
+summary(pnad2001_household$V4609) # projeção da população
+summary(pnad2001_household$V4610) # inverso da fração
 # individidual dataset
-summary(pnad2015_individual$V4729) # peso pessoa
+summary(pnad2001_individual$V4729) # peso pessoa
 
 # design: http://asdfree.com/pesquisa-nacional-por-amostra-de-domicilios-pnad.html
 pop2001_types <- data.frame( 
@@ -100,4 +109,21 @@ pnad2001_design <- postStratify(
 pnad2001_design_srvyr <- prestratified2001_design %>% 
   postStratify(design = prestratified2001_design , strata = ~ V4609 , population = pop2001_types) %>% 
   as_survey()
+#####################################################################################################################
+### sample selection
+# age of the respondents
+summary(pnad2001$V8005)
+sum(pnad2001$V8005 >= 18 & pnad2001$V8005 <=24) # N od respondents between 18 and 24 (N = 52,379).
+
+# position in the household 
+pnad2001_design_srvyr %>% 
+  filter(V8005 >= 18 & V8005 <=24) %>% 
+  mutate(V0401 = factor(V0401)) %>% 
+  group_by(V0401) %>% 
+  summarize(proportion = survey_mean(),
+            total = survey_total()) 
+
+# checking if I get the same results using the survey package.
+pnad2001_age <- subset(pnad2001_design, V8005 >= 18 & V8005 <=24)
+svymean(~as.factor(V0401), pnad2001_age) # YES! got the same results from the previous code.
 #####################################################################################################################
