@@ -1,0 +1,90 @@
+#####################################################################################################################
+# Colombia: ENCV 2003                                                                                               #
+# Opening microdata and merging datasets                                                                            #
+#####################################################################################################################
+### packages
+library(survey)
+library(srvyr)
+library(tidyverse)
+#####################################################################################################################
+# Opening microdata and merging datasets                                                                            #
+#####################################################################################################################
+### setting working directory
+setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
+# datasets dowloaded from: http://microdatos.dane.gov.co/index.php/catalog/186
+### datasets for household
+encv2003_hogar <- read.csv("2003/data/encv2003_hogar.csv") # N = 22,949
+# variables for identification
+summary(encv2003_hogar$ID_VIV) # identificacion vivienda 
+summary(encv2003_hogar$NUMERO) # consecutivo del nmero del formulario, asignado por el sistema para cada hogar.
+### datasets for individuals
+encv2003_personas <- read.csv("2003/data/encv2003_personas.csv") # N = 85,150
+# variables for identification
+summary(encv2003_personas$ID_VIV) # identificacion vivienda 
+summary(encv2003_personas$NUMERO) # consecutivo del numero del formulario, asignado por el sistema para cada hogar.
+summary(encv2003_personas$E01) # numero de orden de la persona
+### datasets for education
+encv2003_educacion <- read.csv("2003/data/encv2003_educacion.csv") # N = 77,374
+                                                                   # only asked for individuals with more than 5 years old.
+# variables for identification
+summary(encv2003_educacion$ID_VIV) # identificacion vivienda 
+summary(encv2003_educacion$NUMERO) # consecutivo del numero del formulario, asignado por el sistema para cada hogar.
+summary(encv2003_educacion$E01) # numero de orden de la persona
+
+# checking region
+encv2003_hogar %>% 
+  count(REGION) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2)) # 1 Atlantica 
+                                               # 2 Oriental 
+                                               # 3 Central 
+                                               # 4 Pacifica (no incluye Valle del Cauca) 
+                                               # 5 Bogota D.C
+                                               # 6 Antioquia 
+                                               # 7 Valle Cauca 
+                                               # 8 San Andres y Providencia (Total Dpto) 
+                                               # 9 Orinoquia y Amazonia (cabeceras)
+
+# merging the datasets
+encv2003_individuals <- merge(encv2003_personas, encv2003_educacion, by = c("ID_VIV", "NUMERO", "E01"), all.x = TRUE)
+encv2003 <- merge(encv2003_individuals, encv2003_hogar, by = c("ID_VIV", "NUMERO"), all.x = TRUE)
+write.csv(encv2003, "2003/microdata/encv2003.csv")
+#####################################################################################################################
+# dataset for analysis
+setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
+encv2003 <- read.csv("2003/microdata/encv2003.csv")
+#####################################################################################################################
+# survey design
+# when I included the weights on SPSS (I am still trying to understand the methodology of the survey to include the
+# weights on R), the results are completely different.
+#####################################################################################################################
+### sample selection
+# age of the respondents
+summary(encv2003$E02)
+sum(encv2003$E02 >= 17 & encv2003$E02 <=23) # N of respondents between 18 and 24 (N = 10,893).
+
+# position in the household 
+encv2003 %>% 
+  filter(E02 >= 17 & E02 <=23) %>% 
+  count(E04) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2)) # 3: Hijo(a) o hijastro(a). N = 6,969 (64.0% without weight)
+
+# still in education
+encv2003 %>% 
+  filter(E02 >= 17 & E02 <=23 & E04 == 3) %>% 
+  count(I02) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# education attainment
+# individuals enrolled in education and were between 18 and 24 years old living with parents.
+encv2003 %>% 
+  filter(E02 >= 17 & E02 <=23 & E04 == 3 & I02 == 1) %>% # I02: Estudia actualmente 1 Si 2 No
+  count(I0701) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2)) # 4: Técnico o tecnologico
+                                               # 5: Universitario
+                                               # 6: Postgrado
+# dummy variable for higher education
+encv2003 %>% 
+  filter(E02 >= 17 & E02 <=23 & E04 == 3 & I02 == 1) %>% # I02: Estudia actualmente 1 Si 2 No
+  mutate(higher_educ = as.numeric(I0701 == 4 | I0701 == 5 | I0701 == 6)) %>% 
+  count(higher_educ) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2)) # with weights on 56.1% (checked on SPSS)
