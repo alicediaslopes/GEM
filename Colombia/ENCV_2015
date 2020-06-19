@@ -1,0 +1,74 @@
+#####################################################################################################################
+# Colombia: ENCV 2015                                                                                               #
+# Opening microdata and merging datasets                                                                            #
+#####################################################################################################################
+### packages
+library(survey)
+library(srvyr)
+library(tidyverse)
+#####################################################################################################################
+# Opening microdata and merging datasets                                                                            #
+#####################################################################################################################
+### setting working directory
+setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
+# datasets dowloaded from: http://microdatos.dane.gov.co/index.php/catalog/419
+### datasets for household
+encv2015_hogar <- read.csv("2015/data/encv2015_hogar.csv") #  N = 22,524
+# variables for identification
+summary(encv2015_hogar$DIRECTORIO)
+### datasets for individuals
+encv2015_personas <- read.csv("2015/data/encv2015_personas.csv")
+# variables for identification
+summary(encv2015_personas$DIRECTORIO)
+summary(encv2015_personas$SECUENCIA_ENCUESTA)
+summary(encv2015_personas$SECUENCIA_P)
+### datasets for education
+encv2015_educacion <- read.csv("2015/data/encv2015_educacion.csv") # N = 70,322
+                                                                   # only individuals older than 5 years old.
+# variables for identification
+summary(encv2015_educacion$DIRECTORIO)
+summary(encv2015_educacion$SECUENCIA_ENCUESTA)
+summary(encv2015_educacion$SECUENCIA_P)
+
+# checking region
+encv2015_hogar %>% 
+  count(REGION) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# merging the datasets
+encv2015_individuals <- merge (encv2015_personas, encv2015_educacion,  by = c("DIRECTORIO", "SECUENCIA_ENCUESTA", "SECUENCIA_P"), all.x = TRUE)
+encv2015 <- merge(encv2015_individuals, encv2015_hogar, by = c("DIRECTORIO"), all.x = TRUE) 
+#write.csv(encv2015, "2015/microdata/encv2015.csv")
+#####################################################################################################################
+# dataset for analysis
+setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
+encv2015 <- read.csv("2015/microdata/encv2015.csv")
+#####################################################################################################################
+# survey design
+# when I included the weights on SPSS (I am still trying to understand the methodology of the survey to include the
+# weights on R), the results are completely different.
+#####################################################################################################################
+### sample selection
+# age of the respondents
+summary(encv2015$P6040)
+sum(encv2015$P6040 >= 17 & encv2015$P6040 <=23) # N of respondents between 17 and 23 (N = 8,790).
+
+# position in the household 
+encv2015 %>% 
+  filter(P6040 >= 17 & P6040 <=23) %>% 
+  count(P6051) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2)) # 3: Hijo(a) o hijastro(a). N = 5,323 (60.6% without weight)
+
+# education attainment
+# individuals enrolled in education and were between 18 and 24 years old living with parents.
+encv2015 %>% 
+  filter(P6040 >= 17 & P6040 <=23 & P6051 == 3 & P8586 == 1) %>% # P8586: Estudia actualmente 1 Si 2 No
+  count(P1088) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# dummy variable for higher education
+encv2015 %>% 
+  filter(P6040 >= 17 & P6040 <=23 & P6051 == 3 & P8586 == 1) %>% 
+  mutate(higher_educ = as.numeric(P1088 == 5 | P1088 == 6 | P1088 == 7 | P1088 == 8)) %>% 
+  count(higher_educ) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
