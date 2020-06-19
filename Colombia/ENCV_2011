@@ -1,0 +1,75 @@
+#####################################################################################################################
+# Colombia: ENCV 2011                                                                                               #
+# Opening microdata and merging datasets                                                                            #
+#####################################################################################################################
+### packages
+library(survey)
+library(srvyr)
+library(tidyverse)
+#####################################################################################################################
+# Opening microdata and merging datasets                                                                            #
+#####################################################################################################################
+### setting working directory
+setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
+# datasets dowloaded from: http://microdatos.dane.gov.co/index.php/catalog/196
+### datasets for household
+encv2011_hogar <- read.csv("2011/data/encv2011_hogar.csv") # N = 22,949
+# variables for identification
+summary(encv2011_hogar$DIRECTORIO)
+### datasets for individuals
+encv2011_personas <- read.csv("2011/data/encv2011_personas.csv") # N = 92,188
+# variables for identification
+summary(encv2011_personas$DIRECTORIO)
+summary(encv2011_personas$SECUENCIA_ENCUESTA)
+### datasets for education
+encv2011_educacion <- read.csv("2011/data/encv2011_educacion.csv") # N = 83,792
+                                                                   # only individuals older than 5 years old.
+# variables for identification
+summary(encv2011_educacion$DIRECTORIO)
+summary(encv2011_educacion$SECUENCIA_ENCUESTA)   
+
+# checking region
+encv2011_hogar %>% 
+  count(REGION) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# merging the datasets
+encv2011_individuals <- merge (encv2011_personas, encv2011_educacion,  by = c("DIRECTORIO", "SECUENCIA_ENCUESTA"), all.x = TRUE)
+encv2011 <- merge(encv2011_individuals, encv2011_hogar, by = c("DIRECTORIO"), all.x = TRUE) 
+#write.csv(encv2011, "2011/microdata/encv2011.csv")
+#####################################################################################################################
+# dataset for analysis
+setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
+encv2011 <- read.csv("2011/microdata/encv2011.csv")
+#####################################################################################################################
+# survey design
+# when I included the weights on SPSS (I am still trying to understand the methodology of the survey to include the
+# weights on R), the results are completely different.
+#####################################################################################################################
+### sample selection
+# age of the respondents
+summary(encv2011$P6040)
+sum(encv2011$P6040 >= 17 & encv2011$P6040 <=23) # N of respondents between 17 and 23 (N = 10,568).
+
+# position in the household 
+encv2011 %>% 
+  filter(P6040 >= 17 & P6040 <=23) %>% 
+  count(P6051) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2)) # 3: Hijo(a) o hijastro(a). N = 6,467 (61.2% without weight)
+
+# education attainment
+# individuals enrolled in education and were between 18 and 24 years old living with parents.
+encv2011 %>% 
+  filter(P6040 >= 17 & P6040 <=23 & P6051 == 3 & P8586 == 1) %>% # P8586: Estudia actualmente 1 Si 2 No
+  count(P6213) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2)) # 5: Técnico 
+                                               # 6: Tecnologico
+                                               # 7: Universitario
+                                               # 8: Postgrado
+
+# dummy variable for higher education
+encv2011 %>% 
+  filter(P6040 >= 17 & P6040 <=23 & P6051 == 3 & P8586 == 1)  %>% 
+  mutate(higher_educ = as.numeric(P6213 == 5 | P6213 == 6 | P6213 == 7 | P6213 == 8)) %>% 
+  count(higher_educ) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
