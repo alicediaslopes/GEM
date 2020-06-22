@@ -1,59 +1,13 @@
 #####################################################################################################################
-#                                              Brazil: PNAD 2001                                                   #
-#####################################################################################################################
-## packages
-#install.packages("bit64")
-library(bit64)
-#install.packages("data.table")
-library(data.table)
-#install.packages("descrr")
-library(descr)
-#install.packages("xlsx")
-library(xlsx)
-#install.packages("tidyverse")
-library(tidyverse)
-#install.packages("survey")
-library(survey)
-options(survey.lonely.psu = "adjust")
-#install.packages("srvyr")
-library(srvyr)
-#####################################################################################################################
-# opening the microdata and saving the datasets
-#####################################################################################################################
-## setting working directory
-setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
-# codebook and dataset
-# downloaded from: 
-# https://www.ibge.gov.br/estatisticas/sociais/habitacao/9127-pesquisa-nacional-por-amostra-de-domicilios.html?=&t=microdados
-dicdom2001 <- read.csv("2001/codebook/dicdom2001.csv")
-dicpes2001 <- read.csv("2001/codebook/dicpes2001.csv")
-
-######## household dataset
-## parâmetro com o final de cada campo
-dicdom2001$end_dom = dicdom2001$inicio + dicdom2001$tamanho - 1
-## converte o microdado para um arquivo csv
-fwf2csv(fwffile='2001/microdata/DOM2001.TXT', csvfile='2011/microdata/dadosdom2001.csv', names=dicdom2001$cod, begin=dicdom2001$inicio, end=dicdom2001$end_dom)
-## efetua a leitura do conjunto de dados com o fread do data.table
-dadosdom2001 <- fread(input='2011/microdata/dadosdom2001.csv', sep='auto', sep2='auto', integer64='double')
-
-######## individual dataset
-## parâmetro com o final de cada campo
-dicpes2001$end_pes <- dicpes2001$inicio + dicpes2001$tamanho - 1
-## converte o microdado para um arquivo csv
-fwf2csv(fwffile='2001/microdata/PES2001.TXT', csvfile='2001/microdata/dadospes2001.csv', names=dicpes2001$cod, begin=dicpes2001$inicio, end=dicpes2001$end_pes)
-## efetua a leitura do conjunto de dados com o fread do data.table
-dadospes2001 <- fread(input='2001/microdata/dadospes2001.csv', sep='auto', sep2='auto', integer64='double') 
-
-## saving the datasets: 
-write.csv(dadosdom2001, "2001/microdata/pnad2001_household.csv")
-write.csv(dadospes2001, "2001/microdata/pnad2001_individual.csv")
-#####################################################################################################################
+# PNAD 2001
 # opening household and individual datasets
 #####################################################################################################################
 ### packages
 library(survey)
 library(srvyr)
 library(tidyverse)
+#####################################################################################################################
+# combining individual and household datasets -------------------------------------------------------
 ### setting working directory
 setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
 # datasets
@@ -70,12 +24,109 @@ summary(pnad2001_individual$V0103) # número de série
 #pnad2001 <- merge(pnad2001_individual, pnad2001_household, by = c("V0102", "V0103")) # merging datasets to get variables for PSU and strata
 #write.csv(pnad2001, "2001/microdata/pnad2001.csv")
 #####################################################################################################################
-# PNAD 2001
-# dataset for analysis
+# data management before defining the survey design -----------------------
 setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
 pnad2001 <- read.csv("2001/microdata/pnad2001.csv")
+
+#### saving information on head of household gender, parental education and occupation 
+# *** I will need to run the survey design after ****
+
+########## head of household education
+pnad2001$V0401 <- as.numeric(pnad2001$V0401) # household position
+table(pnad2001$V0401) # N of head of household = 103,483
+
+# STILL in education N = 4,790
+pnad2001 %>% 
+  filter(V0401 == 1) %>% 
+  count(V0603) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+table(pnad2001$V0603)
+pnad2001$V0603 <- as.numeric(pnad2001$V0603) # STILL in education
+# NOT in education N = 98,693
+pnad2001 %>% 
+  filter(V0401 == 1) %>% 
+  count(V0607) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+table(pnad2001$V0607)
+pnad2001$V0607 <- as.numeric(pnad2001$V0607) # NOT in education
+
+# new variable comnbining both:
+pnad2001$educ[pnad2001$V0603 == "7" | pnad2001$V0603 == "8"] <- 0 # preschool
+pnad2001$educ[pnad2001$V0607 == "9" | pnad2001$V0607 == "10"] <- 0 # preschool
+pnad2001$educ[pnad2001$V0603 == "6" | pnad2001$V0607 == "8"] <- 1 # Young and Adult Education (YAE): literacy
+pnad2001$educ[pnad2001$V0603 == "3"] <- 2 # YAE: lower secondary education
+pnad2001$educ[pnad2001$V0603 == "4"] <- 3 # YAE: upper secondary
+pnad2001$educ[pnad2001$V0603 == "1"] <- 4 # lower secondary education
+pnad2001$educ[pnad2001$V0607 == "1" | pnad2001$V0607 == "2"| pnad2001$V0607 == "4"] <- 4 # lower secondary education
+pnad2001$educ[pnad2001$V0603 == "2" | pnad2001$V0607 == "3" | pnad2001$V0607 == "5"] <- 5 # upper secondary
+pnad2001$educ[pnad2001$V0603 == "9"] <- 5 # upper secondary: pré-vestibular
+pnad2001$educ[pnad2001$V0603 == "5" | pnad2001$V0607 == "6"] <- 6 # higher education
+pnad2001$educ[pnad2001$V0603 == "10" | pnad2001$V0607 == "7"] <- 7 # postgraduate education
+table(pnad2001$educ)
+table(pnad2001$V4702)
+
+# creating the variable for head of household education
+pnad2001$head_educ <- NA
+pnad2001$head_educ <- as.numeric(pnad2001$head_educ)
+pnad2001$head_educ <- if_else(pnad2001$V0401 == 1, pnad2001$educ, pnad2001$head_educ) 
+table(pnad2001$head_educ)
+summary(pnad2001$head_educ)
+
+# creating a variable with the information on household identification number and head of household education
+pnad2001 %>% 
+  select(head_educ, V0401, V0102, V0103) %>% 
+  gather(key="education", value = head_educ, -V0102, -V0103, - V0401) %>% 
+  mutate(education= factor(education),
+         head_educ = factor(head_educ)) %>% 
+  filter(!is.na(head_educ)) %>% 
+  {. ->> head_edu2001} # new dataset with information on parental education and household id number
+
+########## head of household gender
+pnad2001$V0302 <- as.numeric(pnad2001$V0302)
+summary(pnad2001$V0302)
+pnad2001$head_sex <- NA
+pnad2001$head_sex <- as.numeric(pnad2001$head_sex)
+pnad2001$head_sex <- if_else(pnad2001$V0401 == 1, pnad2001$V0302, pnad2001$head_sex) 
+
+# creating a variable with the information on household identification number and head of household education
+pnad2001 %>% 
+  select(head_sex, V0401, V0102, V0103) %>% 
+  gather(key="sex", value = head_sex, -V0102, -V0103, -V0401) %>% 
+  mutate(sex= factor(sex),
+         head_sex = factor(head_sex)) %>% 
+  filter(!is.na(head_sex)) %>% 
+  {. ->> head_sex2001}
+
+########## head of household occupation
+pnad2001$V4767 <- as.numeric(pnad2001$V4767) # grupos de ocupação no trabalho principal do ano - para pessoas de 5 anos ou mais
+summary(pnad2001$V4767)
+pnad2001$head_occup <- NA
+pnad2001$head_occup <- as.numeric(pnad2001$head_occup)
+pnad2001$head_occup <- if_else(pnad2001$V0401 == 1, pnad2001$V4767, pnad2001$head_occup) 
+
+pnad2001 %>% 
+  select(head_occup, V0401, V0102, V0103) %>% 
+  gather(key="occup", value = head_occup, -V0102, -V0103, -V0401) %>% 
+  mutate(occup= factor(occup),
+         head_occup = factor(head_occup)) %>% 
+  filter(!is.na(head_occup)) %>% 
+  {. ->> head_occup2001}
+
+########## merging the datasets
+head_info2001 <- left_join(head_sex2001, head_edu2001, by = c("V0102", "V0103"))
+head_info2001 <- left_join(head_info2001, head_occup2001, by = c("V0102", "V0103"))
+
+head_info2001 <- head_info2001 %>%
+  select(V0102, V0103, head_sex, head_educ, head_occup)
+
+pnad2001 <- left_join(pnad2001, head_info2001, by = c("V0102", "V0103"))
+write.csv(pnad2001, "2001/microdata/pnad2001_headinfo.csv")
 #####################################################################################################################
-### survey design
+# data for analysis -------------------------------------------------------
+setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
+pnad2001 <- read.csv("2001/microdata/pnad2001_headinfo.csv")
+#####################################################################################################################
+# survey design -----------------------------------------------------------
 ### based on the paper: Silva, P. L. do N., Pessoa, D. G. C., & Lila, M. F. (2002). Análise estatística de dados da PNAD: Incorporando a estrutura do plano amostral 
 ### [Statistical Analysis of Data from PNAD: Incorporating the Sample Design]. Ciência & Saúde Coletiva, 7(4), 659–670. https://doi.org/10.1590/S1413-81232002000400005
 
@@ -113,9 +164,15 @@ pnad2001_design_srvyr <- prestratified2001_design %>%
 ### sample selection
 # age of the respondents
 summary(pnad2001$V8005)
-sum(pnad2001$V8005 >= 18 & pnad2001$V8005 <=24) # N od respondents between 18 and 24 (N = 52,379).
+sum(pnad2001$V8005 >= 18 & pnad2001$V8005 <=24) # N of respondents between 18 and 24 (N = 52,379).
 
 # position in the household 
+pnad2001 %>% 
+  filter(V8005 >= 18 & V8005 <=24) %>% 
+  count(V0401) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# position in the household (with weight)
 pnad2001_design_srvyr %>% 
   filter(V8005 >= 18 & V8005 <=24) %>% 
   mutate(V0401 = factor(V0401)) %>% 
@@ -126,4 +183,46 @@ pnad2001_design_srvyr %>%
 # checking if I get the same results using the survey package.
 pnad2001_age <- subset(pnad2001_design, V8005 >= 18 & V8005 <=24)
 svymean(~as.factor(V0401), pnad2001_age) # YES! got the same results from the previous code.
+
+# individuals enrolled in education and were between 18 and 24 years old living with parents.
+summary(pnad2001$V0602)
+sum(pnad2001$V8005 >= 18 & pnad2001$V8005 <= 24 & pnad2001$V0602 == 2 & !is.na(pnad2001$V0602) & pnad2001$V0401 == 3)  # N = 14,040
+
+# education attainment
+# individuals enrolled in education and were between 18 and 24 years old living with parents.
+pnad2001 %>% 
+  filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3) %>% 
+  count(V0603) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2)) # 5: Superior
+                                               # 10: Mestrado ou Doutorado.
+# education attainment
+# individuals enrolled in education and were between 18 and 24 years old living with parents (with weights).
+pnad2001_design_srvyr %>% 
+  filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3 & !is.na(V0603)) %>% 
+  mutate(V0603 = as.factor(V0603)) %>% 
+  group_by(V0603) %>% 
+  summarize(proportion = survey_mean(na.rm = T),
+            total = survey_total(na.rm = T)) # I cannot find the problem with this code!
+
+# individuals enrolled in education and were between 18 and 24 years old living with parents (with weights).
+# dummy variable for higher education
+pnad2001_design_srvyr %>% 
+  filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3 & !is.na(V0603)) %>% 
+  mutate(higher_educ = as.numeric(V0603 == 5 | V0603 == 10)) %>% 
+  mutate(higher_educ = as.factor(higher_educ)) %>% 
+  group_by(higher_educ) %>% 
+  summarize(proportion = survey_mean(na.rm = T),
+            total = survey_total(na.rm = T)) 
+
+# checking if I get the same results using the survey package.
+pnad2001_educ <- subset(pnad2001_design, V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3)
+svymean(~as.factor(V0603), pnad2001_educ, na.rm = T) # got the same results from the previous code.
+
+# creating dummy for higher education (with survey package).
+pnad2001_educ <- update( 
+  pnad2001_educ , 
+  higher_educ = as.numeric(V0603 == 5 | V0603 == 10))
+
+svymean(~ as.factor(higher_educ), pnad2001_educ, na.rm = T)
+unwtd.count(~as.factor(higher_educ), pnad2001_educ)
 #####################################################################################################################
