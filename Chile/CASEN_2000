@@ -105,7 +105,7 @@ write.csv(casen2000, "CASEN/2000/casen2000_headinfo.csv")
 #####################################################################################################################
 # data for analysis -------------------------------------------------------
 setwd("~/Documents/Research/UNESCO/Chile/CASEN")
-pnad2001 <- read.csv("2000/casen2000_headinfo.csv")
+casen2000 <- read.csv("2000/casen2000_headinfo.csv")
 #####################################################################################################################
 ### survey design
 # based on the R package: https://pacha.dev/casen/ (got some help from Mauricio Vargas)
