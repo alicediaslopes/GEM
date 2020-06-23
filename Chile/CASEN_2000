@@ -7,12 +7,105 @@ library(survey)
 library(srvyr)
 library(tidyverse)
 #####################################################################################################################
-# dataset for analysis
+# data management before defining the survey design -----------------------
 #setting working directory
 setwd("~/Documents/Research/UNESCO/Chile")
 # dataset
 # downloaded from: https://github.com/pachamaltese/casen#encuesta-casen-en-formato-r
 casen2000 <- readRDS("CASEN/2000/casen2000.rds")
+
+#### saving information on head of household gender, parental education and occupation 
+# *** I will need to run the survey design after ****
+
+# identification variables for household
+summary(casen2000$segmento)
+summary(casen2000$f)
+
+########## head of household education
+casen2000$pco1 <- as.numeric(casen2000$pco1) # household position
+table(casen2000$pco1) # N of head of household = 65,036
+
+# variable for education
+casen2000 %>% 
+  filter(pco1 == 1) %>% 
+  count(e9) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# creating the variable for head of household education
+casen2000$head_educ <- NA
+casen2000$head_educ <- as.numeric(casen2000$head_educ)
+casen2000$head_educ <- if_else(casen2000$pco1 == 1, casen2000$e9, casen2000$head_educ) 
+table(casen2000$head_educ)
+summary(casen2000$head_educ)
+
+# creating a variable with the information on household identification number and head of household education
+casen2000 %>% 
+  select(head_educ, pco1, segmento, f) %>% 
+  gather(key="education", value = head_educ, -pco1, -segmento, -f) %>% 
+  mutate(education= factor(education),
+         head_educ = factor(head_educ)) %>% 
+  filter(!is.na(head_educ)) %>% 
+  {. ->> head_edu2000} # new dataset with information on parental education and household id number
+
+########## head of household gender
+# variable for education
+casen2000 %>% 
+  filter(pco1 == 1) %>% 
+  count(sexo) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# creating the variable for head of household sex
+casen2000$sexo <- as.numeric(casen2000$sexo)
+summary(casen2000$sexo)
+casen2000$head_sex <- NA
+casen2000$head_sex <- as.numeric(casen2000$head_sex)
+casen2000$head_sex <- if_else(casen2000$pco1 == 1, casen2000$sexo, casen2000$head_sex) 
+summary(casen2000$head_sex)
+
+# creating a variable with the information on household identification number and head of household education
+casen2000 %>% 
+  select(head_sex, pco1, segmento, f) %>% 
+  gather(key="sex", value = head_sex, -pco1, -segmento, -f) %>% 
+  mutate(sex= factor(sex),
+         head_sex = factor(head_sex)) %>% 
+  filter(!is.na(head_sex)) %>% 
+  {. ->> head_sex2000}
+table(head_sex2000$head_sex)
+
+########## head of household occupation
+# variable for occupation
+casen2000 %>% 
+  filter(pco1 == 1) %>% 
+  count(oficio) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2)) # only for individuals who were working
+
+casen2000$oficio <- as.numeric(casen2000$oficio) 
+summary(casen2000$oficio)
+casen2000$head_occup <- NA
+casen2000$head_occup <- as.numeric(casen2000$head_occup)
+casen2000$head_occup <- if_else(casen2000$pco1 == 1, casen2000$oficio, casen2000$head_occup) 
+
+casen2000 %>% 
+  select(head_occup, pco1, segmento, f) %>% 
+  gather(key="occup", value = head_occup, -pco1, -segmento, -f) %>% 
+  mutate(occup= factor(occup),
+         head_occup = factor(head_occup)) %>% 
+  filter(!is.na(head_occup)) %>% 
+  {. ->> head_occup2000}
+
+########## merging the datasets
+head_info2000 <- left_join(head_sex2000, head_edu2000, by = c("segmento", "f"))
+head_info2000 <- left_join(head_info2000, head_occup2000, by = c("segmento", "f"))
+
+head_info2000 <- head_info2000 %>%
+  select(segmento, f, head_sex, head_educ, head_occup)
+
+casen2000 <- left_join(casen2000, head_info2000, by = c("segmento", "f"))
+write.csv(casen2000, "CASEN/2000/casen2000_headinfo.csv")
+#####################################################################################################################
+# data for analysis -------------------------------------------------------
+setwd("~/Documents/Research/UNESCO/Chile/CASEN")
+pnad2001 <- read.csv("2000/casen2000_headinfo.csv")
 #####################################################################################################################
 ### survey design
 # based on the R package: https://pacha.dev/casen/ (got some help from Mauricio Vargas)
@@ -24,7 +117,34 @@ summary(casen2000$expr) # Weight
 # design:
 casen2000_design <- casen2000 %>% 
   as_survey_design(id = segmento, strata = estrato, weight = expr)
+
+# using the survey package
+casen2000_surveydesign <- svydesign(
+  id = ~ segmento ,
+  strata = ~ estrato,
+  data = casen2000,
+  weights = ~ expr)
 #####################################################################################################################
+# sample selection
 # checking the age of the respondents
 summary(casen2000$edad)
 sum(casen2000$edad >= 18 & casen2000$edad <=24) # N od respondents between 18 and 24 (N = 28,604).
+
+# position in the household
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24) %>% 
+  count(pco1) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2)))
+
+# position in the household (with weights)
+casen2000 %>% 
+  as_survey_design(id = segmento, strata = estrato, weight = expr) %>% 
+  filter(edad >= 18 & edad <=24) %>% 
+  mutate(pco1 = factor(pco1)) %>% 
+  group_by(pco1) %>% 
+  summarize(proportion = survey_mean(),
+            total = survey_total()) 
+
+# checking if I get the same results using the survey package.
+casen2000_age <- subset(casen2000_surveydesign, edad >= 18 & edad <=24)
+svymean(~as.factor(pco1), casen2000_age) # got the same results from the previous code.
