@@ -1,0 +1,108 @@
+#####################################################################################################################
+# CASEN 2015
+# opening household and individual datasets
+#####################################################################################################################
+### packages
+library(survey)
+library(srvyr)
+library(tidyverse)
+library(casen)
+#####################################################################################################################
+# data management before defining the survey design -----------------------
+#setting working directory
+setwd("~/Documents/Research/UNESCO/Chile")
+# dataset
+# downloaded from: https://github.com/pachamaltese/casen#encuesta-casen-en-formato-r
+casen2015 <- readRDS("CASEN/2015/casen2015.rds")
+
+#### saving information on head of household gender, parental education and occupation 
+# *** I will need to run the survey design after ****
+# 
+# identification variable for household
+summary(casen2015$folio)
+
+########## head of household education
+casen2015$pco1 <- as.numeric(casen2015$pco1) # household position
+table(casen2015$pco1) # N of head of household = 83,887 
+
+# variable for education
+casen2015 %>% 
+  filter(pco1 == 1) %>% 
+  count(e6a) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# creating the variable for head of household education
+casen2015$head_educ <- NA
+casen2015$head_educ <- as.numeric(casen2015$head_educ)
+casen2015$head_educ <- if_else(casen2015$pco1 == 1, casen2015$e6a, casen2015$head_educ) 
+table(casen2015$head_educ)
+summary(casen2015$head_educ)
+
+# creating a variable with the information on household identification number and head of household education
+casen2015 %>% 
+  select(head_educ, pco1, folio) %>% 
+  gather(key="education", value = head_educ, -pco1, -folio) %>% 
+  mutate(education= factor(education),
+         head_educ = factor(head_educ)) %>% 
+  filter(!is.na(head_educ)) %>% 
+  {. ->> head_edu2015}
+
+########## head of household gender
+# variable for education
+casen2015 %>% 
+  filter(pco1 == 1) %>% 
+  count(sexo) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# creating the variable for head of household sex
+casen2015$sexo <- as.numeric(casen2015$sexo)
+summary(casen2015$sexo)
+casen2015$head_sex <- NA
+casen2015$head_sex <- as.numeric(casen2015$head_sex)
+casen2015$head_sex <- if_else(casen2015$pco1 == 1, casen2015$sexo, casen2015$head_sex) 
+summary(casen2015$head_sex)
+
+# creating a variable with the information on household identification number and head of household education
+casen2015 %>% 
+  select(head_sex, pco1, folio) %>% 
+  gather(key="sex", value = head_sex, -pco1, -folio) %>% 
+  mutate(sex= factor(sex),
+         head_sex = factor(head_sex)) %>% 
+  filter(!is.na(head_sex)) %>% 
+  {. ->> head_sex2015}
+
+########## head of household occupation
+# variable for occupation
+casen2015 %>% 
+  filter(pco1 == 1) %>% 
+  count(oficio1) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2)) # only for individuals who were working
+
+casen2015$oficio1 <- as.numeric(casen2015$oficio1) 
+summary(casen2015$oficio1)
+casen2015$head_occup <- NA
+casen2015$head_occup <- as.numeric(casen2015$head_occup)
+casen2015$head_occup <- if_else(casen2015$pco1 == 1, casen2015$oficio1, casen2015$head_occup) 
+
+casen2015 %>% 
+  select(head_occup, pco1, folio) %>% 
+  gather(key="occup", value = head_occup, -pco1, -folio) %>% 
+  mutate(occup= factor(occup),
+         head_occup = factor(head_occup)) %>% 
+  filter(!is.na(head_occup)) %>% 
+  {. ->> head_occup2015}
+
+########## merging the datasets
+head_info2015 <- left_join(head_sex2015, head_edu2015, by = c("folio"))
+head_info2015 <- left_join(head_info2015, head_occup2015, by = c("folio"))
+
+head_info2015 <- head_info2015 %>%
+  select(folio, head_sex, head_educ, head_occup)
+
+casen2015 <- left_join(casen2015, head_info2015, by = c("folio"))
+write.csv(casen2015, "CASEN/2015/casen2015_headinfo.csv")
+#####################################################################################################################
+# data for analysis -------------------------------------------------------
+setwd("~/Documents/Research/UNESCO/Chile/CASEN")
+casen2015 <- read.csv("2015/casen2015_headinfo.csv")
+#####################################################################################################################
