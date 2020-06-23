@@ -17,9 +17,8 @@ casen2011 <- readRDS("CASEN/2011/casen2011.rds")
 
 #### saving information on head of household gender, parental education and occupation 
 # *** I will need to run the survey design after ****
-#
 
-# identification variables for household
+# identification variable for household
 summary(casen2011$folio)
 
 ########## head of household education
@@ -38,7 +37,6 @@ casen2011$head_educ <- as.numeric(casen2011$head_educ)
 casen2011$head_educ <- if_else(casen2011$pco1 == 1, casen2011$e6a, casen2011$head_educ) 
 table(casen2011$head_educ)
 summary(casen2011$head_educ)
-
 
 # creating a variable with the information on household identification number and head of household education
 casen2011 %>% 
