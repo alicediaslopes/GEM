@@ -1,5 +1,5 @@
 #####################################################################################################################
-# PNAD 2011
+# Brazil: PNAD 2011
 # opening household and individual datasets
 #####################################################################################################################
 ### packages
@@ -127,7 +127,7 @@ write.csv(pnad2011, "2011/microdata/pnad2011_headinfo.csv")
 setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
 pnad2011 <- read.csv("2011/microdata/pnad2011_headinfo.csv")
 #####################################################################################################################
-### survey design
+### survey design -------------------------------------------------------
 ### based on the paper: Silva, P. L. do N., Pessoa, D. G. C., & Lila, M. F. (2002). Análise estatística de dados da PNAD: Incorporando a estrutura do plano amostral 
 ### [Statistical Analysis of Data from PNAD: Incorporating the Sample Design]. Ciência & Saúde Coletiva, 7(4), 659–670. https://doi.org/10.1590/S1413-81232002000400005
 
@@ -162,11 +162,12 @@ pnad2011_design_srvyr <- prestratified2011_design %>%
   postStratify(design = prestratified2011_design , strata = ~ V4609 , population = pop2011_types) %>% 
   as_survey()
 #####################################################################################################################
-# sample selection
+# sample selection -------------------------------------------------------
 # age of the respondents
 summary(pnad2011$V8005)
 sum(pnad2011$V8005 >= 18 & pnad2011$V8005 <=24) # N od respondents between 18 and 24 (N = 41,945).
 
+#### SAMPLE 1:
 # position in the household 
 pnad2011 %>% 
   filter(V8005 >= 18 & V8005 <=24) %>% 
@@ -185,11 +186,11 @@ pnad2011_design_srvyr %>%
 pnad2011_age <- subset(pnad2011_design, V8005 >= 18 & V8005 <=24)
 svymean(~as.factor(V0401), pnad2011_age) # YES! got the same results from the previous code.
 
+#### SAMPLE 2:
 # individuals enrolled in education and were between 18 and 24 years old living with parents.
 summary(pnad2011$V0602)
 sum(pnad2011$V8005 >= 18 & pnad2011$V8005 <= 24 & pnad2011$V0602 == 2 & pnad2011$V0401 == 3) # N = 9,281
 
-# education attainment
 # individuals enrolled in education and were between 18 and 24 years old living with parents.
 pnad2011 %>% 
   filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3)  %>% 
@@ -197,7 +198,6 @@ pnad2011 %>%
   mutate(prop = round(100*(prop.table(n)), 2)) # 5: Superior
                                                # 11: Mestrado ou doutorado
 
-# education attainment
 # individuals enrolled in education and were between 18 and 24 years old living with parents (with weights).
 pnad2011_design_srvyr %>% 
   filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3)  %>% 
@@ -206,8 +206,7 @@ pnad2011_design_srvyr %>%
   summarize(proportion = survey_mean(na.rm = T),
             total = survey_total(na.rm = T)) 
 
-# individuals enrolled in education and were between 18 and 24 years old living with parents (with weights).
-# dummy variable for higher education
+# indicator variable for higher education for individuals between 18 and 24 years old living with parents (with weights).
 pnad2011_design_srvyr %>% 
   filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3 & !is.na(V6003)) %>% 
   mutate(higher_educ = as.numeric(V6003 == 5 | V6003 == 11)) %>% 
