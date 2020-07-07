@@ -7,6 +7,35 @@ library(survey)
 library(srvyr)
 library(tidyverse)
 #####################################################################################################################
+# opening the microdata and saving the datasets -----------------------
+## setting working directory
+setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
+# codebook and dataset
+# downloaded from: 
+# https://www.ibge.gov.br/estatisticas/sociais/habitacao/9127-pesquisa-nacional-por-amostra-de-domicilios.html?=&t=microdados
+dicdom2001 <- read.csv("2001/codebook/dicdom2001.csv")
+dicpes2001 <- read.csv("2001/codebook/dicpes2001.csv")
+
+######## household dataset
+## parâmetro com o final de cada campo
+dicdom2001$end_dom = dicdom2001$inicio + dicdom2001$tamanho - 1
+## converte o microdado para um arquivo csv
+fwf2csv(fwffile='2001/microdata/DOM2001.TXT', csvfile='2011/microdata/dadosdom2001.csv', names=dicdom2001$cod, begin=dicdom2001$inicio, end=dicdom2001$end_dom)
+## efetua a leitura do conjunto de dados com o fread do data.table
+dadosdom2001 <- fread(input='2011/microdata/dadosdom2001.csv', sep='auto', sep2='auto', integer64='double')
+
+######## individual dataset
+## parâmetro com o final de cada campo
+dicpes2001$end_pes <- dicpes2001$inicio + dicpes2001$tamanho - 1
+## converte o microdado para um arquivo csv
+fwf2csv(fwffile='2001/microdata/PES2001.TXT', csvfile='2001/microdata/dadospes2001.csv', names=dicpes2001$cod, begin=dicpes2001$inicio, end=dicpes2001$end_pes)
+## efetua a leitura do conjunto de dados com o fread do data.table
+dadospes2001 <- fread(input='2001/microdata/dadospes2001.csv', sep='auto', sep2='auto', integer64='double') 
+
+## saving the datasets: 
+write.csv(dadosdom2001, "2001/microdata/pnad2001_household.csv")
+write.csv(dadospes2001, "2001/microdata/pnad2001_individual.csv")
+#####################################################################################################################
 # combining individual and household datasets -------------------------------------------------------
 ### setting working directory
 setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
