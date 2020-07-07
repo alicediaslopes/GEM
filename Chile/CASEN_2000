@@ -125,7 +125,7 @@ setwd("~/Documents/Research/UNESCO/Chile/CASEN")
 casen2000 <- read.csv("2000/casen2000_headinfo.csv")
 #####################################################################################################################
 ### survey design -------------------------------------------------------
-# based on the R package: https://pacha.dev/casen/ (got some help from Mauricio Vargas)
+# based on the R package: https://pacha.dev/casen/ (got some help from Mauricio Vargas - mvargas@dcc.uchile.cl)
 # variables to take into account the survey design
 summary(casen2000$segmento) # PSU
 summary(casen2000$estrato) # STRATA
