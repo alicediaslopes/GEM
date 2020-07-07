@@ -1,5 +1,5 @@
 #####################################################################################################################
-# PNAD 2015
+# Brazil: PNAD 2015
 # opening household and individual datasets
 #####################################################################################################################
 ### packages
@@ -126,9 +126,9 @@ write.csv(pnad2015, "2015/microdata/pnad2015_headinfo.csv")
 #####################################################################################################################
 # data for analysis -------------------------------------------------------
 setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
-pnad2011 <- read.csv("2011/microdata/pnad2011_headinfo.csv")
+pnad2015 <- read.csv("2015/microdata/pnad2015_headinfo.csv")
 #####################################################################################################################
-### survey design
+### survey design -------------------------------------------------------
 ### based on the paper: Silva, P. L. do N., Pessoa, D. G. C., & Lila, M. F. (2002). Análise estatística de dados da PNAD: Incorporando a estrutura do plano amostral 
 ### [Statistical Analysis of Data from PNAD: Incorporating the Sample Design]. Ciência & Saúde Coletiva, 7(4), 659–670. https://doi.org/10.1590/S1413-81232002000400005
 
@@ -163,11 +163,12 @@ pnad2015_design_srvyr <- prestratified2015_design %>%
   postStratify(design = prestratified2015_design , strata = ~ V4609 , population = pop2015_types) %>% 
   as_survey()
 #####################################################################################################################
-# sample selection
+# sample selection -------------------------------------------------------
 # age of the respondents
 summary(pnad2015$V8005)
 sum(pnad2015$V8005 >= 18 & pnad2015$V8005 <=24) # N od respondents between 18 and 24 (N = 39,673).
 
+#### SAMPLE 1:
 # position in the household 
 pnad2015 %>% 
   filter(V8005 >= 18 & V8005 <=24) %>% 
@@ -186,11 +187,11 @@ pnad2015_design_srvyr %>%
 pnad2015_age <- subset(pnad2015_design, V8005 >= 18 & V8005 <=24)
 svymean(~as.factor(V0401), pnad2015_age) # YES! got the same results from the previous code.
 
+#### SAMPLE 2:
 # individuals enrolled in education and were between 18 and 24 years old living with parents.
 summary(pnad2015$V0602)
 sum(pnad2015$V8005 >= 18 & pnad2015$V8005 <= 24 & pnad2015$V0602 == 2 & pnad2015$V0401 == 3) # N = 9,262
 
-# education attainment
 # individuals enrolled in education and were between 18 and 24 years old living with parents.
 pnad2015 %>% 
   filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3)  %>% 
@@ -198,7 +199,6 @@ pnad2015 %>%
   mutate(prop = round(100*(prop.table(n)), 2)) # 5: Superior
                                                # 11: Mestrado ou doutorado
 
-# education attainment
 # individuals enrolled in education and were between 18 and 24 years old living with parents (with weights).
 pnad2015_design_srvyr %>% 
   filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3)  %>% 
@@ -207,8 +207,7 @@ pnad2015_design_srvyr %>%
   summarize(proportion = survey_mean(na.rm = T),
             total = survey_total(na.rm = T)) 
 
-# individuals enrolled in education and were between 18 and 24 years old living with parents (with weights).
-# dummy variable for higher education
+# indicator variable for higher education for individuals between 18 and 24 years old living with parents (with weights).
 pnad2015_design_srvyr %>% 
   filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3 & !is.na(V6003)) %>% 
   mutate(higher_educ = as.numeric(V6003 == 5 | V6003 == 11)) %>% 
@@ -225,7 +224,9 @@ svymean(~as.factor(V6003), pnad2015_educ, na.rm = T) # got the same results from
 pnad2015_educ <- update( 
   pnad2015_educ , 
   higher_educ = as.numeric(V6003 == 5 | V6003 == 11))
-
 svymean(~ as.factor(higher_educ), pnad2015_educ, na.rm = T)
 unwtd.count(~as.factor(higher_educ), pnad2015_educ)
 #####################################################################################################################
+
+
+
