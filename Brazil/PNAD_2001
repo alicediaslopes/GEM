@@ -1,5 +1,5 @@
 #####################################################################################################################
-# PNAD 2001
+# Brazil: PNAD 2001
 # opening household and individual datasets
 #####################################################################################################################
 ### packages
@@ -161,7 +161,7 @@ pnad2001_design_srvyr <- prestratified2001_design %>%
   postStratify(design = prestratified2001_design , strata = ~ V4609 , population = pop2001_types) %>% 
   as_survey()
 #####################################################################################################################
-### sample selection
+### sample selection  -----------------------------------------------------------
 # age of the respondents
 summary(pnad2001$V8005)
 sum(pnad2001$V8005 >= 18 & pnad2001$V8005 <=24) # N of respondents between 18 and 24 (N = 52,379).
@@ -184,18 +184,18 @@ pnad2001_design_srvyr %>%
 pnad2001_age <- subset(pnad2001_design, V8005 >= 18 & V8005 <=24)
 svymean(~as.factor(V0401), pnad2001_age) # YES! got the same results from the previous code.
 
+#### SAMPLE 2:
 # individuals enrolled in education and were between 18 and 24 years old living with parents.
 summary(pnad2001$V0602)
 sum(pnad2001$V8005 >= 18 & pnad2001$V8005 <= 24 & pnad2001$V0602 == 2 & !is.na(pnad2001$V0602) & pnad2001$V0401 == 3)  # N = 14,040
 
-# education attainment
 # individuals enrolled in education and were between 18 and 24 years old living with parents.
 pnad2001 %>% 
   filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3) %>% 
   count(V0603) %>% 
   mutate(prop = round(100*(prop.table(n)), 2)) # 5: Superior
                                                # 10: Mestrado ou Doutorado.
-# education attainment
+
 # individuals enrolled in education and were between 18 and 24 years old living with parents (with weights).
 pnad2001_design_srvyr %>% 
   filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3 & !is.na(V0603)) %>% 
@@ -204,8 +204,7 @@ pnad2001_design_srvyr %>%
   summarize(proportion = survey_mean(na.rm = T),
             total = survey_total(na.rm = T)) # I cannot find the problem with this code!
 
-# individuals enrolled in education and were between 18 and 24 years old living with parents (with weights).
-# dummy variable for higher education
+# indicator variable for higher education for individuals between 18 and 24 years old living with parents (with weights).
 pnad2001_design_srvyr %>% 
   filter(V8005 >= 18 & V8005 <= 24 & V0602 == 2 & V0401 == 3 & !is.na(V0603)) %>% 
   mutate(higher_educ = as.numeric(V0603 == 5 | V0603 == 10)) %>% 
