@@ -1,26 +1,28 @@
 #####################################################################################################################
 # Colombia: ENCV 2011                                                                                               #
-# Opening microdata and merging datasets                                                                            #
+# opening microdata and merging datasets                                                                            #
 #####################################################################################################################
 ### packages
 library(survey)
 library(srvyr)
 library(tidyverse)
 #####################################################################################################################
-# Opening microdata and merging datasets                                                                            #
-#####################################################################################################################
+# opening microdata and merging datasets  -------------------------------------------------------   
 ### setting working directory
 setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
 # datasets dowloaded from: http://microdatos.dane.gov.co/index.php/catalog/196
+
 ### datasets for household
-encv2011_hogar <- read.csv("2011/data/encv2011_hogar.csv") # N = 22,949
+encv2011_hogar <- read.csv("2011/data/encv2011_hogar.csv") # N = 24,557
 # variables for identification
 summary(encv2011_hogar$DIRECTORIO)
+
 ### datasets for individuals
 encv2011_personas <- read.csv("2011/data/encv2011_personas.csv") # N = 92,188
 # variables for identification
 summary(encv2011_personas$DIRECTORIO)
 summary(encv2011_personas$SECUENCIA_ENCUESTA)
+
 ### datasets for education
 encv2011_educacion <- read.csv("2011/data/encv2011_educacion.csv") # N = 83,792
                                                                    # only individuals older than 5 years old.
@@ -28,36 +30,171 @@ encv2011_educacion <- read.csv("2011/data/encv2011_educacion.csv") # N = 83,792
 summary(encv2011_educacion$DIRECTORIO)
 summary(encv2011_educacion$SECUENCIA_ENCUESTA)   
 
+### datasets for occupation
+encv2011_trabajo <- read.csv("2011/data/encv2011_trabajo.csv") # N = 70,292
+                                                
+# variables for identification
+summary(encv2011_trabajo$DIRECTORIO)
+summary(encv2011_trabajo$SECUENCIA_ENCUESTA)   
+
 # checking region
 encv2011_hogar %>% 
   count(REGION) %>% 
   mutate(prop = round(100*(prop.table(n)), 2))
 
 # merging the datasets
-encv2011_individuals <- merge (encv2011_personas, encv2011_educacion,  by = c("DIRECTORIO", "SECUENCIA_ENCUESTA"), all.x = TRUE)
-encv2011 <- merge(encv2011_individuals, encv2011_hogar, by = c("DIRECTORIO"), all.x = TRUE) 
-#write.csv(encv2011, "2011/microdata/encv2011.csv")
+encv2011_individuals <- merge(encv2011_personas, encv2011_educacion, by = c("LLAVEHOG","DIRECTORIO", "SECUENCIA_ENCUESTA", "NRO_ENCUESTA", "SECUENCIA_P", "ORDEN", "FEX_C"), all.x = TRUE)
+names(encv2011_individuals)
+encv2011_individuals <- merge(encv2011_individuals, encv2011_trabajo, by = c("LLAVEHOG", "DIRECTORIO", "SECUENCIA_ENCUESTA", "NRO_ENCUESTA", "SECUENCIA_P", "ORDEN", "FEX_C"), all.x = TRUE)
+names(encv2011_individuals)
+write.csv(encv2011, "2011/microdata/encv2011.csv")
 #####################################################################################################################
-# dataset for analysis
+# data management before defining the survey design -----------------------
 setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
 encv2011 <- read.csv("2011/microdata/encv2011.csv")
+
+#### saving information on head of household gender, parental education and occupation 
+# *** I will need to run the survey design after ****
+
+# identification variables for household
+summary(encv2011$LLAVEHOG)
+names(encv2011)
+
+########## head of household education
+encv2011$P6051 <- as.numeric(encv2011$P6051) # household position
+table(encv2011$P6051) # N of head of household = 25,364
+
+# variable for education (finished education)
+encv2011 %>% 
+  filter(P6051 == 1) %>% 
+  count(P6219) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# variable for education (still in education)
+encv2011 %>% 
+  filter(P6051 == 1) %>% 
+  count(P6213) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# combining both variables:
+encv2011$educ[encv2011$P6219 == "1"] <- 0 # none
+encv2011$educ[encv2011$P6219 == "2" | encv2011$P6213 == "1"] <- 1 # preschool
+encv2011$educ[encv2011$P6219 == "3" | encv2011$P6213 == "2"] <- 2 # primary
+encv2011$educ[encv2011$P6219 == "4" | encv2011$P6213 == "3"] <- 3 # lower secondary
+encv2011$educ[encv2011$P6219 == "5" | encv2011$P6213 == "4"] <- 4 # upper secondary
+encv2011$educ[encv2011$P6219 == "6" | encv2011$P6219 == "7" |encv2011$P6213 == "5"] <- 5 # technical
+encv2011$educ[encv2011$P6219 == "8" | encv2011$P6219 == "9" |encv2011$P6213 == "6"] <- 6 # technological
+encv2011$educ[encv2011$P6219 == "10" | encv2011$P6219 == "11" |encv2011$P6213 == "7"] <- 7 # university
+encv2011$educ[encv2011$P6219 == "12" | encv2011$P6219 == "13" |encv2011$P6213 == "8"] <- 8 # postgrad
+table(encv2011$educ)
+
+# creating the variable for head of household education
+encv2011$head_educ <- NA
+encv2011$head_educ <- as.numeric(encv2011$head_educ)
+encv2011$head_educ <- if_else(encv2011$P6051 == 1, encv2011$educ, encv2011$head_educ) 
+table(encv2011$head_educ)
+summary(encv2011$head_educ)
+
+encv2011 %>% 
+  select(head_educ, P6051, LLAVEHOG) %>% 
+  gather(key="education", value = head_educ, -P6051, -LLAVEHOG) %>% 
+  mutate(education= factor(education),
+         head_educ = factor(head_educ)) %>% 
+  filter(!is.na(head_educ)) %>% 
+  {. ->> head_edu2011}
+
+########## head of household gender
+encv2011 %>% 
+  filter(P6051 == 1) %>% 
+  count(P6020) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+encv2011$P6020 <- as.numeric(encv2011$P6020)
+summary(encv2011$P6020)
+encv2011$head_sex <- NA
+encv2011$head_sex <- as.numeric(encv2011$head_sex)
+encv2011$head_sex <- if_else(encv2011$P6051 == 1, encv2011$P6020, encv2011$head_sex) 
+
+# creating a variable with the information on household identification number and head of household education
+encv2011 %>% 
+  select(head_sex, P6051, LLAVEHOG) %>% 
+  gather(key="sex", value = head_sex, -P6051, -LLAVEHOG) %>% 
+  mutate(sex= factor(sex),
+         head_sex = factor(head_sex)) %>% 
+  filter(!is.na(head_sex)) %>% 
+  {. ->> head_sex2011}
+
+########## head of household occupation
+encv2011 %>% 
+  filter(P6051 == 1) %>% 
+  count(P6435) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+encv2011$P6435 <- as.numeric(encv2011$P6435)
+summary(encv2011$P6435)
+encv2011$head_occup <- NA
+encv2011$head_occup <- as.numeric(encv2011$head_occup)
+encv2011$head_occup <- if_else(encv2011$P6051 == 1, encv2011$P6435, encv2011$head_occup) 
+
+encv2011 %>% 
+  select(head_occup, P6051, LLAVEHOG) %>% 
+  gather(key="occup", value = head_occup, -P6051, -LLAVEHOG) %>% 
+  mutate(occup= factor(occup),
+         head_occup = factor(head_occup)) %>% 
+  filter(!is.na(head_occup)) %>% 
+  {. ->> head_occup2011}
+
+########## merging the datasets
+head_info2011 <- left_join(head_sex2011, head_edu2011, by = c("LLAVEHOG"))
+head_info2011 <- left_join(head_info2011, head_occup2011, by = c("LLAVEHOG"))
+
+head_info2011 <- head_info2011 %>%
+  select(LLAVEHOG, head_sex, head_educ, head_occup)
+
+encv2011 <- left_join(encv2011, head_info2011, by = c("LLAVEHOG"))
+write.csv(encv2011, "2011/microdata/encv2011_headinfo.csv")
 #####################################################################################################################
-# survey design
-# when I included the weights on SPSS (I am still trying to understand the methodology of the survey to include the
-# weights on R), the results are completely different.
+# data for analysis -------------------------------------------------------
+setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
+encv2011 <- read.csv("2011/microdata/encv2011_headinfo.csv")
 #####################################################################################################################
-### sample selection
+# survey design -------------------------------------------------------
+# design:
+encv2011_design <- encv2011 %>% 
+  as_survey_design(weight = FEX_C)
+
+# using the survey package
+encv2011_surveydesign <- svydesign(
+  id = ~1,
+  data = encv2011,
+  weights = ~ FEX_C)
+#####################################################################################################################
+### sample selection -------------------------------------------------------
 # age of the respondents
 summary(encv2011$P6040)
 sum(encv2011$P6040 >= 17 & encv2011$P6040 <=23) # N of respondents between 17 and 23 (N = 10,568).
 
+#### SAMPLE 1:
 # position in the household 
 encv2011 %>% 
   filter(P6040 >= 17 & P6040 <=23) %>% 
   count(P6051) %>% 
   mutate(prop = round(100*(prop.table(n)), 2)) # 3: Hijo(a) o hijastro(a). N = 6,467 (61.2% without weight)
 
-# education attainment
+# position in the household (with weights)
+encv2011 %>% 
+  as_survey_design(weight = FEX_C) %>% 
+  filter(P6040 >= 17 & P6040 <=23) %>% 
+  mutate(P6051 = factor(P6051)) %>% 
+  group_by(P6051) %>% 
+  summarize(proportion = survey_mean(),
+            total = survey_total()) 
+
+# checking if I get the same results using the survey package.
+encv2011_age <- subset(encv2011_surveydesign, P6040 >= 17 & P6040 <=23)
+svymean(~as.factor(P6051), encv2011_age) # got the same results from the previous code.
+
+#### SAMPLE 2:
 # individuals enrolled in education and were between 18 and 24 years old living with parents.
 encv2011 %>% 
   filter(P6040 >= 17 & P6040 <=23 & P6051 == 3 & P8586 == 1) %>% # P8586: Estudia actualmente 1 Si 2 No
@@ -67,9 +204,29 @@ encv2011 %>%
                                                # 7: Universitario
                                                # 8: Postgrado
 
-# dummy variable for higher education
+# indicator variable for higher education for individuals between 18 and 24 years old living with parents.
 encv2011 %>% 
   filter(P6040 >= 17 & P6040 <=23 & P6051 == 3 & P8586 == 1)  %>% 
   mutate(higher_educ = as.numeric(P6213 == 5 | P6213 == 6 | P6213 == 7 | P6213 == 8)) %>% 
   count(higher_educ) %>% 
   mutate(prop = round(100*(prop.table(n)), 2))
+
+# # indicator variable for higher education for individuals between 18 and 24 years old living with parents (with weights).
+encv2011_design  %>% 
+  filter(P6040 >= 17 & P6040 <=23 & P6051 == 3 & P8586 == 1)  %>% 
+  mutate(higher_educ = as.numeric(P6213 == 5 | P6213 == 6 | P6213 == 7 | P6213 == 8))  %>% 
+  mutate(higher_educ = as.factor(higher_educ)) %>% 
+  group_by(higher_educ) %>% 
+  summarize(proportion = survey_mean(na.rm = T),
+            total = survey_total(na.rm = T)) 
+
+# checking if I get the same results using the survey package.
+encv2011_educ <- subset(encv2011_surveydesign, P6040 >= 17 & P6040 <=23 & P6051 == 3 & P8586 == 1) 
+
+# creating dummy for higher education (with survey package).
+encv2011_educ <- update( 
+  encv2011_educ , 
+  higher_educ = as.numeric(P6213 == 5 | P6213 == 6 | P6213 == 7 | P6213 == 8)) 
+
+svymean(~ as.factor(higher_educ), encv2011_educ, na.rm = T)
+#####################################################################################################################
