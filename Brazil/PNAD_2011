@@ -7,6 +7,34 @@ library(survey)
 library(srvyr)
 library(tidyverse)
 #####################################################################################################################
+# opening the microdata and saving the datasets
+## setting working directory
+setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
+# codebook and dataset
+# downloaded from: 
+# https://www.ibge.gov.br/estatisticas/sociais/habitacao/9127-pesquisa-nacional-por-amostra-de-domicilios.html?=&t=microdados
+load("2011/codebook/dicPNAD2011.Rdata") # codebook
+
+######## household dataset
+## parâmetro com o final de cada campo
+dicdom2011$end_dom = dicdom2011$inicio + dicdom2011$tamanho - 1
+## converte o microdado para um arquivo csv
+fwf2csv(fwffile='2011/microdata/DOM2011.txt', csvfile='2011/microdata/dadosdom2011.csv', names=dicdom2011$cod, begin=dicdom2011$inicio, end=dicdom2011$end_dom)
+## efetua a leitura do conjunto de dados com o fread do data.table
+dadosdom2011 <- fread(input='2011/microdata/dadosdom2011.csv', sep='auto', sep2='auto', integer64='double')
+
+######## individual dataset
+## parâmetro com o final de cada campo
+dicpes2011$end_pes = dicpes2011$inicio + dicpes2011$tamanho - 1
+## converte o microdado para um arquivo csv
+fwf2csv(fwffile='2011/microdata/PES2011.txt', csvfile='2011/microdata/dadospes2011.csv', names=dicpes2011$cod, begin=dicpes2011$inicio, end=dicpes2011$end_pes)
+## efetua a leitura do conjunto de dados com o fread do data.table
+pnad2011 <- fread(input='2011/microdata/dadospes2011.csv', sep='auto', sep2='auto', integer64='double')
+
+## saving the datasets: 
+write.csv(dadosdom2011, "2011/microdata/pnad2011_household.csv")
+write.csv(pnad2011, "2011/microdata/pnad2011_individual.csv")
+#####################################################################################################################
 # combining individual and household datasets -------------------------------------------------------
 ### setting working directory
 setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
