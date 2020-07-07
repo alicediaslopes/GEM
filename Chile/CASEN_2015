@@ -1,5 +1,5 @@
 #####################################################################################################################
-# CASEN 2015
+# Chile: CASEN 2015
 # opening household and individual datasets
 #####################################################################################################################
 ### packages
@@ -93,6 +93,10 @@ casen2015 %>%
   {. ->> head_occup2015}
 
 ########## merging the datasets
+casen2015$head_educ <- NULL
+casen2015$head_sex <- NULL
+casen2015$head_occup <- NULL
+
 head_info2015 <- left_join(head_sex2015, head_edu2015, by = c("folio"))
 head_info2015 <- left_join(head_info2015, head_occup2015, by = c("folio"))
 
@@ -105,4 +109,237 @@ write.csv(casen2015, "CASEN/2015/casen2015_headinfo.csv")
 # data for analysis -------------------------------------------------------
 setwd("~/Documents/Research/UNESCO/Chile/CASEN")
 casen2015 <- read.csv("2015/casen2015_headinfo.csv")
+#####################################################################################################################
+### survey design -------------------------------------------------------
+# based on the R package: https://pacha.dev/casen/ (got some help from Mauricio Vargas - mvargas@dcc.uchile.cl)
+# variables to take into account the survey design
+summary(casen2015$varunit) # PSU
+summary(casen2015$varstrat) # STRATA
+summary(casen2015$expr) # Weight
+
+# design:
+casen2015_design <- casen2015 %>% 
+  as_survey_design(id = varunit, strata = varstrat, weight = expr)
+
+# using the survey package
+casen2015_surveydesign <- svydesign(
+  id = ~ varunit ,
+  strata = ~ varstrat,
+  data = casen2015,
+  weights = ~ expr)
+
+# checking if I get the same results from the code that Mauricio sent.
+# keep getting the same error! 
+# Error in attr(x, "names") <- as.character(value): 'names' attribute [1] must be the same length as the vector [0]
+urlcasen2015 <- "https://pachamaltese.github.io/casen/data-rds/2015.rds"
+rdscasen2015 <- "2015.rds"
+if (!file.exists(rdscasen2015)) download.file(urlcasen2015, rdscasen2015)
+casen2015 <- readRDS(rdscasen2015)
+library(dplyr)
+casen2015 %>%
+  filter(edad >= 18 & edad <= 24) %>%
+  select(edad, pco1, expr, varstrat, varunit) %>%
+  configuracion_disenio("edad", "pco1", "expr") %>%
+  media_agrupada()
+#####################################################################################################################
+# sample selection -------------------------------------------------------
+# checking the age of the respondents
+summary(casen2015$edad)
+sum(casen2015$edad >= 18 & casen2015$edad <=24) # N od respondents between 18 and 24 (N = 30,692).
+
+#### SAMPLE 1:
+# position in the household
+casen2015 %>% 
+  filter(edad >= 18 & edad <=24) %>% 
+  count(pco1) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 4: Hijo de ambos
+                                                     # 5: Hijo solo de jefe
+                                                     # 6: Hijo solo del esposo(a) o pareja
+
+# dummy variable for offspring
+casen2015$offspring <- NA
+casen2015$offspring[casen2015$pco1 <= 3] <- 0
+casen2015$offspring[casen2015$pco1 >= 4 & casen2015$pco1 <= 6] <- 1 
+casen2015$offspring[casen2015$pco1 >= 7] <- 0 
+
+# position in the household (with weights)
+casen2015 %>% 
+  as_survey_design(id = varunit, strata = varstrat, weight = expr, nest = TRUE) %>% 
+  filter(edad >= 18 & edad <=24) %>% 
+  mutate(offspring = as.numeric(pco1 >= 4 & pco1 <=6)) %>%
+  mutate(offspring = as.factor(offspring)) %>% 
+  group_by(offspring) %>% 
+  summarize(proportion = survey_mean(),
+            total = survey_total())
+
+# checking if I get the same results using the survey package.
+casen2015_age <- subset(casen2015_surveydesign, edad >= 18 & edad <=24)
+
+# creating dummy for offspring (with survey package).
+casen2015_age <- update( 
+  casen2015_age, 
+  offspring = as.numeric(pco1 >= 4 & pco1 <=6)) 
+
+svymean(~as.factor(offspring), casen2015_age) # got the same results from the previous code.
+
+#### SAMPLE 2:
+# indicator variable for higher education for individuals between 18 and 24 years old living with parents
+casen2015 %>% 
+  filter(edad >= 18 & edad <=24 & offspring == 1 & e3 == 1) %>% 
+  mutate(higher_educ = as.numeric(e6a >= 12 & e6a <= 17)) %>%
+  mutate(higher_educ = factor(higher_educ)) %>% 
+  count(higher_educ) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 12: Técnico Nivel Superior Incompleto (Carreras 1 a 3 años)
+                                                     # 13: Técnico Nivel Superior Completo (Carreras 1 a 3 años)
+                                                     # 14: Profesional Incompleto (Carreras 4 ó más años)
+                                                     # 15: Profesional Completo (Carreras 4 ó más años)
+                                                     # 16: Postgrado Incompleto
+                                                     # 17: Postgrado Completo
+
+# indicator variable for higher education for individuals between 18 and 24 years old living with parents (with weights).
+casen2015 %>% 
+  as_survey_design(id = varunit, strata = varstrat, weight = expr) %>% 
+  filter(edad >= 18 & edad <=24 & offspring == 1 & e3 == 1) %>% 
+  mutate(higher_educ = as.numeric(e6a >= 12 & e6a <= 17)) %>%
+  mutate(higher_educ = factor(higher_educ)) %>% 
+  group_by(higher_educ) %>% 
+  summarize(proportion = survey_mean(),
+            total = survey_total())
+
+# checking if I get the same results using the survey package.
+casen2015_educ <- subset(casen2015_surveydesign, edad >= 18 & edad <=24 & offspring == 1 & e3 == 1) 
+
+# creating dummy for higher education (with survey package).
+casen2015_educ <- update( 
+  casen2015_educ, 
+  higher_educ = as.numeric(e6a >= 12 & e6a <= 17)) 
+
+svymean(~ as.factor(higher_educ), casen2015_educ, na.rm = T)
+#####################################################################################################################
+# independent variables -------------------------------------------------------
+
+### SAMPLE 1 (N = 22,099):
+# subsetting:
+casen2015_sample1 <- subset(casen2015_surveydesign, edad >= 18 & edad <=24 & pco1 >= 4 & pco1 <=6)
+ 
+# sex
+casen2015 %>% 
+  mutate(offspring = as.numeric(pco1 >= 4 & pco1 <=6)) %>%
+  filter(edad >= 18 & edad <=24 & offspring == 1) %>% 
+  count(sexo) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 1: Hombre
+                                                     # 2: Mujer
+
+# sex (with weights)
+100*(svymean(~as.factor(sexo), casen2015_sample1)) 
+
+# race
+casen2015 %>% 
+  mutate(offspring = as.numeric(pco1 >= 4 & pco1 <=6)) %>%
+  filter(edad >= 18 & edad <=24 & offspring == 1) %>% 
+  mutate(ethnicity = as.numeric(r3 >= 1 & r3 <= 9)) %>% 
+  count(ethnicity) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # >= 1 & <= 9: Indigenous
+                                                     # 10: No pertenece a ningún pueblo indígena
+
+# race (with weights)
+casen2015_sample1 <- update( 
+  casen2015_sample1, 
+  ethnicity = as.numeric(r6 >= 1 & r6 <= 9))
+
+100*(svymean(~as.factor(ethnicity), casen2015_sample1)) 
+
+# parental education
+casen2015 %>% 
+  mutate(offspring = as.numeric(pco1 >= 4 & pco1 <=6)) %>%
+  filter(edad >= 18 & edad <=24 & offspring == 1) %>% 
+  count(head_educ) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 1 Nunca asistió
+                                                     # 2 Jardín infantil
+                                                     # 3 Sala cuna
+                                                     # 4 Kinder/pre-kinder
+                                                     # 5 Educación especial (diferencial)
+                                                     # 6 Primaria o preparatoria
+                                                     # 7 Educación básica
+                                                     # 8 Humanidades (Sistema Antiguo)
+                                                     # 9 Educación Media Científico-Humanística
+                                                     # 10 Técnica, Comercial, Industrial o Normalista (Sistema Antiguo)
+                                                     # 11 Educación Media Técnica Profesional
+                                                     # 12 Técnico Nivel Superior Incompleto
+                                                     # 13 Técnico Nivel Superior Completo
+                                                     # 14 Profesional Incompleto
+                                                     # 15 Profesional Completo
+                                                     # 16 Postgrado Incompleto
+                                                     # 17 Postgrado Completo
+                                                     # 99 Sin dato
+
+# parental education (with weights)
+100*(svymean(~as.factor(head_educ), casen2015_sample1)) 
+
+# parental occupation
+casen2015 %>% 
+  mutate(offspring = as.numeric(pco1 >= 4 & pco1 <=6)) %>%
+  filter(edad >= 18 & edad <=24 & offspring == 1) %>% 
+  count(head_occup) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 0 Fuerzas Armadas
+                                                     # 1 Miembros del poder ejecutivo y de los cuerpos legislativos
+                                                     # 2 Profesionales, científicos e intelectuales
+                                                     # 3 Técnicos y profesionales de nivel medio
+                                                     # 4 Empleados de oficina
+                                                     # 5 Trabajadores de los servicios y vendedores de comercio y mercado
+                                                     # 6 Agricultores y trabajadores calificados agropecuarios y pesqueros
+                                                     # 7 Oficiales, operarios y artesanos de artes, mecánica y otros oficios
+                                                     # 8 Operadores y montadores de Instalaciones y Maquinaria
+                                                     # 9 Trabajadores no calificados
+                                                     # NA Sin respuesta
+
+# parental occupation (with weights)
+100*(svymean(~as.factor(head_occup), casen2015_sample1, na.rm = T)) 
+
+### SAMPLE 2 (N = 11,559):
+# subsetting:
+casen2015_sample2 <- subset(casen2015_surveydesign, edad >= 18 & edad <=24 & pco1 >= 4 & pco1 <=6 & e3 == 1)
+
+# sex
+casen2015 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 >= 4 & pco1 <=6 & e3 == 1) %>% 
+  count(sexo) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 1: Hombre 
+                                                     # 2: Mujer
+
+# sex (with weights)
+100*(svymean(~as.factor(sexo), casen2015_sample2)) 
+
+# race
+casen2015 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 >= 4 & pco1 <=6 & e3 == 1) %>% 
+  mutate(ethnicity = as.numeric(r3 >= 1 & r3 <= 9)) %>% 
+  count(ethnicity) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # >= 1 & <= 9: Indigenous
+                                                     # 10: No pertenece a ningún pueblo indígena
+
+# race (with weights)
+casen2015_sample2 <- update( 
+  casen2015_sample2, 
+  ethnicity = as.numeric(r3 >= 1 & r3 <= 9))
+
+100*(svymean(~as.factor(ethnicity), casen2015_sample2)) 
+
+# parental education
+casen2015 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 >= 4 & pco1 <=6 & e3 == 1) %>% 
+  count(head_educ) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) 
+
+# parental education (with weights)
+100*(svymean(~as.factor(head_educ), casen2015_sample2)) 
+
+# parental occupation
+casen2015 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 >= 4 & pco1 <=6 & e3 == 1) %>% 
+  count(head_occup) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) 
+
+# parental occupation (with weights)
+100*(svymean(~as.factor(head_occup), casen2015_sample2, na.rm = T)) 
 #####################################################################################################################
