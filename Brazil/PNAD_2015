@@ -7,6 +7,34 @@ library(survey)
 library(srvyr)
 library(tidyverse)
 #####################################################################################################################
+# opening the microdata and saving the datasets -------------------------------------------------------
+## setting working directory
+setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
+# codebook and dataset
+# downloaded from: 
+# ftp://ftp.ibge.gov.br/Trabalho_e_Rendimento/Pesquisa_Nacional_por_Amostra_de_Domicilios_anual/microdados/2015/
+load("2015/codebook/dicPNAD2015.Rdata") # codebook
+
+######## household dataset
+## parâmetro com o final de cada campo
+dicdom2015$end_dom = dicdom2015$inicio + dicdom2015$tamanho - 1
+## converte o microdado para um arquivo csv
+fwf2csv(fwffile='2015/microdata/DOM2015.txt', csvfile='2015/microdata/dadosdom2015.csv', names=dicdom2015$cod, begin=dicdom2015$inicio, end=dicdom2015$end_dom)
+## efetua a leitura do conjunto de dados com o fread do data.table
+pnad2015_household <- fread(input='2015/microdata/dadosdom2015.csv', sep='auto', sep2='auto', integer64='double')
+
+######## individual dataset
+## parâmetro com o final de cada campo
+dicpes2015$end_pes = dicpes2015$inicio2 + dicpes2015$tamanho2 - 1
+## converte o microdado para um arquivo csv
+fwf2csv(fwffile='2015/microdata/PES2015.txt', csvfile='2015/microdata/dadospes2015.csv', names=dicpes2015$cod2, begin=dicpes2015$inicio2, end=dicpes2015$end_pes)
+## efetua a leitura do conjunto de dados com o fread do data.table
+pnad2015_individual <- fread(input='2015/microdata/dadospes2015.csv', sep='auto', sep2='auto', integer64='double')
+
+## saving the datasets: 
+write.csv(pnad2015_household, "2015/microdata/pnad2015_household.csv")
+write.csv(pnad2015_individual, "2015/microdata/pnad2015_individual.csv")
+#####################################################################################################################
 # combining individual and household datasets -------------------------------------------------------
 ### setting working directory
 setwd("~/Documents/Research/UNESCO/Brazil/PNAD")
