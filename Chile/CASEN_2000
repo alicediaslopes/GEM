@@ -1,11 +1,12 @@
 #####################################################################################################################
-# CASEN 2000
+# Chile: CASEN 2000
 # opening household and individual datasets
 #####################################################################################################################
 ### packages
 library(survey)
 library(srvyr)
 library(tidyverse)
+library(casen)
 #####################################################################################################################
 # data management before defining the survey design -----------------------
 #setting working directory
@@ -94,6 +95,10 @@ casen2000 %>%
   {. ->> head_occup2000}
 
 ########## merging the datasets
+casen2000$head_educ <- NULL
+casen2000$head_sex <- NULL
+casen2000$head_occup <- NULL
+
 head_info2000 <- left_join(head_sex2000, head_edu2000, by = c("segmento", "f"))
 head_info2000 <- left_join(head_info2000, head_occup2000, by = c("segmento", "f"))
 
@@ -101,13 +106,25 @@ head_info2000 <- head_info2000 %>%
   select(segmento, f, head_sex, head_educ, head_occup)
 
 casen2000 <- left_join(casen2000, head_info2000, by = c("segmento", "f"))
+
+table(casen2000$head_educ)
+casen2000$head_educ2 [is.na(casen2000$head_educ)] <- 0
+casen2000$head_educ2 [casen2000$head_educ == 16] <- 0
+casen2000$head_educ2 [casen2000$head_educ == 1 | casen2000$head_educ == 4] <- 1
+casen2000$head_educ2 [casen2000$head_educ == 2 | casen2000$head_educ == 3] <- 2
+casen2000$head_educ2 [casen2000$head_educ == 5 | casen2000$head_educ == 6 | casen2000$head_educ == 7 | casen2000$head_educ == 8] <- 3
+casen2000$head_educ2 [casen2000$head_educ == 9 | casen2000$head_educ == 10 | casen2000$head_educ == 11 | casen2000$head_educ == 12 |
+                        casen2000$head_educ == 13 | casen2000$head_educ == 14 | casen2000$head_educ == 15 ] <- 4
+table(casen2000$head_educ2)
+summary(casen2000$head_educ2)
+
 write.csv(casen2000, "CASEN/2000/casen2000_headinfo.csv")
 #####################################################################################################################
 # data for analysis -------------------------------------------------------
 setwd("~/Documents/Research/UNESCO/Chile/CASEN")
 casen2000 <- read.csv("2000/casen2000_headinfo.csv")
 #####################################################################################################################
-### survey design
+### survey design -------------------------------------------------------
 # based on the R package: https://pacha.dev/casen/ (got some help from Mauricio Vargas)
 # variables to take into account the survey design
 summary(casen2000$segmento) # PSU
@@ -125,11 +142,12 @@ casen2000_surveydesign <- svydesign(
   data = casen2000,
   weights = ~ expr)
 #####################################################################################################################
-# sample selection
+# sample selection -------------------------------------------------------
 # checking the age of the respondents
 summary(casen2000$edad)
 sum(casen2000$edad >= 18 & casen2000$edad <=24) # N od respondents between 18 and 24 (N = 28,604).
 
+#### SAMPLE 1:
 # position in the household
 casen2000 %>% 
   filter(edad >= 18 & edad <=24) %>% 
@@ -148,3 +166,178 @@ casen2000 %>%
 # checking if I get the same results using the survey package.
 casen2000_age <- subset(casen2000_surveydesign, edad >= 18 & edad <=24)
 svymean(~as.factor(pco1), casen2000_age) # got the same results from the previous code.
+
+#### SAMPLE 2:
+# indicator variable for higher education for individuals between 18 and 24 years old living with parents
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3 & e9 != 99 & e3 == 1) %>% 
+  mutate(higher_educ = as.numeric(e9 >= 9)) %>% 
+  count(higher_educ) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 9: Centro de Formación incompleta (sin título)
+                                                     # 10: Centro de Formación completa (con título)
+                                                     # 11: Instituto Profesional incompleta (sin título)
+                                                     # 12: Instituto Profesional completa (con título)
+                                                     # 13: Educación Universitaria incompleta (sin título)
+                                                     # 14: Educación Universitaria completa (con título)
+                                                     # 15: Universitaria de Postgrado
+
+# indicator variable for higher education for individuals between 18 and 24 years old living with parents (with weights).
+casen2000 %>% 
+  as_survey_design(id = segmento, strata = estrato, weight = expr) %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3 & e9 != 99 & e3 == 1) %>% 
+  mutate(higher_educ = as.numeric(e9 >= 9)) %>% 
+  mutate(higher_educ = as.factor(higher_educ)) %>% 
+  group_by(higher_educ) %>% 
+  summarize(proportion = survey_mean(na.rm = T),
+            total = survey_total(na.rm = T)) 
+
+# checking if I get the same results using the survey package.
+casen2000_educ <- subset(casen2000_surveydesign, edad >= 18 & edad <=24 & pco1 == 3 & e9 != 99 & e3 == 1) 
+
+# creating dummy for higher education (with survey package).
+casen2000_educ <- update( 
+  casen2000_educ, 
+  higher_educ = as.numeric(e9 >= 9)) 
+
+svymean(~ as.factor(higher_educ), casen2000_educ, na.rm = T)
+#####################################################################################################################
+# dependent variables -------------------------------------------------------
+### SAMPLE 1 (N = 20,061):
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3) %>% 
+  mutate(higher_educ = as.numeric(e9 >= 9)) %>% 
+  count(higher_educ) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2)))
+
+casen2000_sample1 <- subset(casen2000_surveydesign, edad >= 18 & edad <=24 & pco1 == 3) 
+
+casen2000_sample1 <- update( 
+  casen2000_sample1, 
+  higher_educ = as.numeric(e9 >= 9 & e9 <=15)) # dependent variable: higher education or NOT
+
+svymean(~ as.factor(higher_educ), casen2000_sample1, na.rm = T)
+
+### SAMPLE 2 (N = 6,689):
+casen2000_sample2 <- subset(casen2000_surveydesign, edad >= 18 & edad <=24 & pco1 == 3 & e3 == 1)
+
+# e9: 
+# 9 Centro de Formación Técnica incompleta (sin título) (4)
+# 10 Centro de Formación Técnica completa (con título) (4)
+# 11 Instituto Profesional incompleta (sin título) (4)
+# 12 Instituto Profesional completa (con título) (4)
+# 13 Educación Universitaria incompleta (sin título) (4)
+# 14 Educación Universitaria completa (con título) (4)
+# 15 Universitaria de Postgrado (4)
+
+casen2000_sample2 <- update( 
+  casen2000_sample2, 
+  technical_centre = as.numeric(e9 == 9 | e9 ==10),
+  professional_institute = as.numeric (e9 == 11 | e9 ==12),
+  university = as.numeric (e9 == 13 | e9 == 14 | e9 == 15))
+
+#####################################################################################################################
+# independent variables -------------------------------------------------------
+
+### SAMPLE 1 (N = 20,061):
+casen2000_sample1 <- subset(casen2000_surveydesign, edad >= 18 & edad <=24 & pco1 == 3) 
+
+# sex
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3) %>% 
+  count(sexo) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 1: Hombre
+                                                     # 2: Mujer
+# sex (with weights)
+100*(svymean(~as.factor(sexo), casen2000_sample1)) 
+
+# race
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3) %>% 
+  mutate(ethnicity = as.numeric(etnia >= 1 & etnia <= 8)) %>% 
+  count(ethnicity) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 0: No indigenous
+                                                     # >= 1 & <= 8: Indigenous
+                                                     # 9: Don't know
+
+# race (with weights)
+casen2000_sample1 <- update( 
+  casen2000_sample1, 
+  ethnicity = as.numeric(etnia >= 1 & etnia <= 8))
+
+100*(svymean(~as.factor(ethnicity), casen2000_sample1)) 
+
+# parental education
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3) %>% 
+  count(head_educ2) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) 
+
+# parental education (with weights)
+100*(svymean(~as.factor(head_educ2), casen2000_sample1, rm.na = T)) 
+
+# parental occupation
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3) %>% 
+  count(head_occup) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 0 Fuerzas Armadas
+                                                     # 1 Miembros del poder ejecutivo y de los cuerpos legislativos
+                                                     # 2 Profesionales, científicos e intelectuales
+                                                     # 3 Técnicos y profesionales de nivel medio
+                                                     # 4 Empleados de oficina
+                                                     # 5 Trabajadores de los servicios y vendedores de comercio y mercados
+                                                     # 6 Agricultores y trabajadores calificados agropecuarios y pesqueros
+                                                     # 7 Oficiales, operarios y artesanos de artes, mecánica y otros oficios
+                                                     # 8 Operadores y montadores de Instalaciones y Maquinaria
+                                                     # 9 Trabajadores no calificados
+                                                     # 9999 Sin respuesta
+
+# parental occupation (with weights)
+100*(svymean(~as.factor(head_occup), casen2000_sample1, na.rm = T)) 
+
+### SAMPLE 2 (N = 6,689):
+# subsetting:
+casen2000_sample2 <- subset(casen2000_surveydesign, edad >= 18 & edad <=24 & pco1 == 3 & e3 == 1)
+
+# sex
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3 & e3 == 1) %>% 
+  count(sexo) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 1: Hombre
+                                                     # 2: Mujer
+# sex (with weights)
+100*(svymean(~as.factor(sexo), casen2000_sample2)) 
+
+# race
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3 & e3 == 1) %>% 
+  mutate(ethnicity = as.numeric(etnia >= 1 & etnia <= 8)) %>% 
+  count(ethnicity) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) # 0: No indigenous
+                                                     # >= 1 & <= 8: Indigenous
+                                                     # 9: Don't know
+
+# race (with weights)
+casen2000_sample2 <- update( 
+  casen2000_sample2, 
+  ethnicity = as.numeric(etnia >= 1 & etnia <= 8))
+
+100*(svymean(~as.factor(ethnicity), casen2000_sample2)) 
+
+# parental education
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3 & e3 == 1) %>% 
+  count(head_educ) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) 
+
+# parental education (with weights)
+100*(svymean(~as.factor(head_educ), casen2000_sample2)) 
+
+# parental occupation
+casen2000 %>% 
+  filter(edad >= 18 & edad <=24 & pco1 == 3 & e3 == 1) %>% 
+  count(head_occup) %>% 
+  mutate(freq = paste0(round(100 *(n / sum(n)), 2))) 
+
+# parental occupation (with weights)
+100*(svymean(~as.factor(head_occup), casen2000_sample2, na.rm = T)) 
+#####################################################################################################################
