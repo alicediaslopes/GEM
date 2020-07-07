@@ -1,28 +1,31 @@
 #####################################################################################################################
 # Colombia: ENCV 2003                                                                                               #
-# Opening microdata and merging datasets                                                                            #
+# opening microdata and merging datasets                                                                            #
 #####################################################################################################################
 ### packages
 library(survey)
 library(srvyr)
 library(tidyverse)
 #####################################################################################################################
-# Opening microdata and merging datasets                                                                            #
-#####################################################################################################################
+# opening microdata and merging datasets  -------------------------------------------------------   
 ### setting working directory
 setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
 # datasets dowloaded from: http://microdatos.dane.gov.co/index.php/catalog/186
+
 ### datasets for household
 encv2003_hogar <- read.csv("2003/data/encv2003_hogar.csv") # N = 22,949
 # variables for identification
 summary(encv2003_hogar$ID_VIV) # identificacion vivienda 
 summary(encv2003_hogar$NUMERO) # consecutivo del nmero del formulario, asignado por el sistema para cada hogar.
+
 ### datasets for individuals
 encv2003_personas <- read.csv("2003/data/encv2003_personas.csv") # N = 85,150
+
 # variables for identification
 summary(encv2003_personas$ID_VIV) # identificacion vivienda 
 summary(encv2003_personas$NUMERO) # consecutivo del numero del formulario, asignado por el sistema para cada hogar.
 summary(encv2003_personas$E01) # numero de orden de la persona
+
 ### datasets for education
 encv2003_educacion <- read.csv("2003/data/encv2003_educacion.csv") # N = 77,374
                                                                    # only asked for individuals with more than 5 years old.
@@ -30,6 +33,12 @@ encv2003_educacion <- read.csv("2003/data/encv2003_educacion.csv") # N = 77,374
 summary(encv2003_educacion$ID_VIV) # identificacion vivienda 
 summary(encv2003_educacion$NUMERO) # consecutivo del numero del formulario, asignado por el sistema para cada hogar.
 summary(encv2003_educacion$E01) # numero de orden de la persona
+
+### datasets for occupation
+encv2003_trabajo <- read.csv("2003/data/encv2003_trabajo.csv")
+summary(encv2003_trabajo$ID_VIV) # identificacion vivienda 
+summary(encv2003_trabajo$NUMERO) # consecutivo del numero del formulario, asignado por el sistema para cada hogar.
+summary(encv2003_trabajo$E01)
 
 # checking region
 encv2003_hogar %>% 
@@ -46,35 +55,156 @@ encv2003_hogar %>%
 
 # merging the datasets
 encv2003_individuals <- merge(encv2003_personas, encv2003_educacion, by = c("ID_VIV", "NUMERO", "E01"), all.x = TRUE)
+encv2003_individuals <- merge(encv2003_individuals, encv2003_trabajo, by = c("ID_VIV", "NUMERO", "E01"), all.x = TRUE)
 encv2003 <- merge(encv2003_individuals, encv2003_hogar, by = c("ID_VIV", "NUMERO"), all.x = TRUE)
 write.csv(encv2003, "2003/microdata/encv2003.csv")
 #####################################################################################################################
-# dataset for analysis
+# data management before defining the survey design -----------------------
 setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
 encv2003 <- read.csv("2003/microdata/encv2003.csv")
+
+#### saving information on head of household gender, parental education and occupation 
+# *** I will need to run the survey design after ****
+
+# identification variables for household
+names(encv2003)
+summary(encv2003$ID_VIV)
+summary(encv2003$NUMERO)
+
+########## head of household education
+encv2003$E04 <- as.numeric(encv2003$E04) # household position
+table(encv2003$E04) # N of head of household = 22,949
+
+# variable for education (finished education)
+encv2003 %>% 
+  filter(E04 == 1) %>% 
+  count(I0401) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# variable for education (still in education)
+encv2003 %>% 
+  filter(E04 == 1) %>% 
+  count(I0701) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+# combining both variables:
+encv2003$educ[encv2003$I0401 == "1"] <- 0 # none
+encv2003$educ[encv2003$I0401 == "2" | encv2003$I0701 == "1"] <- 1 # preschool
+encv2003$educ[encv2003$I0401 == "3" | encv2003$I0701 == "2"] <- 2 # primary
+encv2003$educ[encv2003$I0401 == "4" | encv2003$I0701 == "3"] <- 3 # secondary
+encv2003$educ[encv2003$I0401 == "5" | encv2003$I0701 == "4"] <- 4 # technical
+encv2003$educ[encv2003$I0401 == "6" | encv2003$I0401 == "7" | encv2003$I0701 == "5"] <- 5 # university
+encv2003$educ[encv2003$I0401 == "8" | encv2003$I0401 == "9" | encv2003$I0701 == "6"] <- 6 # postgrad
+table(encv2003$educ)
+
+# creating the variable for head of household education
+encv2003$head_educ <- NA
+encv2003$head_educ <- as.numeric(encv2003$head_educ)
+encv2003$head_educ <- if_else(encv2003$E04 == 1, encv2003$educ, encv2003$head_educ) 
+table(encv2003$head_educ)
+summary(encv2003$head_educ)
+
+# creating a variable with the information on household identification number and head of household education
+encv2003 %>% 
+  select(head_educ, E04, ID_VIV, NUMERO) %>% 
+  gather(key="education", value = head_educ, -E04, -ID_VIV, -NUMERO) %>% 
+  mutate(education= factor(education),
+         head_educ = factor(head_educ)) %>% 
+  filter(!is.na(head_educ)) %>% 
+  {. ->> head_edu2003} # new dataset with information on parental education and household id number
+
+########## head of household gender
+encv2003 %>% 
+  filter(E04 == 1) %>% 
+  count(E03) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+encv2003$E03 <- as.numeric(encv2003$E03)
+summary(encv2003$E03)
+encv2003$head_sex <- NA
+encv2003$head_sex <- as.numeric(encv2003$head_sex)
+encv2003$head_sex <- if_else(encv2003$E04 == 1, encv2003$E03, encv2003$head_sex) 
+
+# creating a variable with the information on household identification number and head of household education
+encv2003 %>% 
+  select(head_sex, E04, ID_VIV, NUMERO) %>% 
+  gather(key="sex", value = head_sex, -E04, -ID_VIV, -NUMERO) %>% 
+  mutate(sex= factor(sex),
+         head_sex = factor(head_sex)) %>% 
+  filter(!is.na(head_sex)) %>% 
+  {. ->> head_sex2003}
+
+########## head of household occupation
+encv2003 %>% 
+  filter(E04 == 1) %>% 
+  count(L17) %>% 
+  mutate(prop = round(100*(prop.table(n)), 2))
+
+encv2003$L17 <- as.numeric(encv2003$L17)
+summary(encv2003$L17)
+encv2003$head_occup <- NA
+encv2003$head_occup <- as.numeric(encv2003$head_occup)
+encv2003$head_occup <- if_else(encv2003$E04 == 1, encv2003$L17, encv2003$head_occup) 
+
+encv2003 %>% 
+  select(head_occup, E04, ID_VIV, NUMERO) %>% 
+  gather(key="occup", value = head_occup, -E04, -ID_VIV, -NUMERO) %>% 
+  mutate(occup= factor(occup),
+         head_occup = factor(head_occup)) %>% 
+  filter(!is.na(head_occup)) %>% 
+  {. ->> head_occup2003}
+
+########## merging the datasets
+head_info2003 <- left_join(head_sex2003, head_edu2003, by = c("ID_VIV", "NUMERO"))
+head_info2003 <- left_join(head_info2003, head_occup2003, by = c("ID_VIV", "NUMERO"))
+
+head_info2003 <- head_info2003 %>%
+  select(ID_VIV, NUMERO, head_sex, head_educ, head_occup)
+
+encv2003 <- left_join(encv2003, head_info2003, by = c("ID_VIV", "NUMERO"))
+write.csv(encv2003, "2003/microdata/encv2003_headinfo.csv")
 #####################################################################################################################
-# survey design
-# when I included the weights on SPSS (I am still trying to understand the methodology of the survey to include the
-# weights on R), the results are completely different.
+# data for analysis -------------------------------------------------------
+setwd("~/Documents/Research/UNESCO/Colombia/ENCV")
+encv2003 <- read.csv("2003/microdata/encv2003_headinfo.csv")
 #####################################################################################################################
-### sample selection
+# survey design  -------------------------------------------------------
+# design:
+encv2003_design <- encv2003 %>% 
+  as_survey_design(weight = FEX_2005.x)
+
+# using the survey package
+encv2003_surveydesign <- svydesign(
+  id = ~1,
+  data = encv2003,
+  weights = ~ FEX_2005.x)
+#####################################################################################################################
+### sample selection -------------------------------------------------------
 # age of the respondents
 summary(encv2003$E02)
 sum(encv2003$E02 >= 17 & encv2003$E02 <=23) # N of respondents between 18 and 24 (N = 10,893).
 
+#### SAMPLE 1:
 # position in the household 
 encv2003 %>% 
   filter(E02 >= 17 & E02 <=23) %>% 
   count(E04) %>% 
   mutate(prop = round(100*(prop.table(n)), 2)) # 3: Hijo(a) o hijastro(a). N = 6,969 (64.0% without weight)
 
-# still in education
+# position in the household (with weights)
 encv2003 %>% 
-  filter(E02 >= 17 & E02 <=23 & E04 == 3) %>% 
-  count(I02) %>% 
-  mutate(prop = round(100*(prop.table(n)), 2))
+  as_survey_design(weight = FEX_2005.x) %>% 
+  filter(E02 >= 17 & E02 <=23) %>% 
+  mutate(E04 = factor(E04)) %>% 
+  group_by(E04) %>% 
+  summarize(proportion = survey_mean(),
+            total = survey_total()) 
 
-# education attainment
+# checking if I get the same results using the survey package.
+encv2003_age <- subset(encv2003_surveydesign, E02 >= 17 & E02 <=23)
+svymean(~as.factor(E04), encv2003_age) # got the same results from the previous code.
+
+#### SAMPLE 2:
 # individuals enrolled in education and were between 18 and 24 years old living with parents.
 encv2003 %>% 
   filter(E02 >= 17 & E02 <=23 & E04 == 3 & I02 == 1) %>% # I02: Estudia actualmente 1 Si 2 No
@@ -82,9 +212,30 @@ encv2003 %>%
   mutate(prop = round(100*(prop.table(n)), 2)) # 4: Técnico o tecnologico
                                                # 5: Universitario
                                                # 6: Postgrado
-# dummy variable for higher education
+
+# indicator variable for higher education for individuals between 18 and 24 years old living with parents.
 encv2003 %>% 
   filter(E02 >= 17 & E02 <=23 & E04 == 3 & I02 == 1) %>% # I02: Estudia actualmente 1 Si 2 No
   mutate(higher_educ = as.numeric(I0701 == 4 | I0701 == 5 | I0701 == 6)) %>% 
   count(higher_educ) %>% 
   mutate(prop = round(100*(prop.table(n)), 2)) # with weights on 56.1% (checked on SPSS)
+
+# indicator variable for higher education for individuals between 18 and 24 years old living with parents (with weights).
+encv2003_design  %>% 
+  filter(E02 >= 17 & E02 <=23 & E04 == 3 & I02 == 1)  %>% 
+  mutate(higher_educ = as.numeric(I0701 == 4 | I0701 == 5 | I0701 == 6))  %>% 
+  mutate(higher_educ = as.factor(higher_educ)) %>% 
+  group_by(higher_educ) %>% 
+  summarize(proportion = survey_mean(na.rm = T),
+            total = survey_total(na.rm = T)) 
+
+# checking if I get the same results using the survey package.
+encv2003_educ <- subset(encv2003_surveydesign, E02 >= 17 & E02 <=23 & E04 == 3 & I02 == 1) 
+
+# creating dummy for higher education (with survey package).
+encv2003_educ <- update( 
+  encv2003_educ , 
+  higher_educ = as.numeric(I0701 == 4 | I0701 == 5 | I0701 == 6)) 
+
+svymean(~ as.factor(higher_educ), encv2003_educ, na.rm = T)
+#####################################################################################################################
